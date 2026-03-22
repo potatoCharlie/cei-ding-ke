@@ -1,5 +1,6 @@
-import { MAX_DISTANCE, NORMAL_MOVE_SPEED, SLOWED_MOVE_SPEED } from '../constants.js';
+import { NORMAL_MOVE_SPEED, SLOWED_MOVE_SPEED } from '../constants.js';
 import type { GameState, HeroState, GameEffect } from '../types/game.js';
+import { getForwardDirection, getTeamIndex, findHeroByPlayerId } from './position.js';
 
 /**
  * Get the effective move speed for a hero based on status effects.
@@ -17,72 +18,62 @@ export function canMove(hero: HeroState): boolean {
 }
 
 /**
- * Move a hero forward (closer to opponent). Returns the new distance and effects.
+ * Move a hero forward (toward opponent). Returns the new position and effects.
  */
-export function moveForward(state: GameState, playerId: string): { newDistance: number; effects: GameEffect[] } {
-  const hero = findHero(state, playerId);
-  if (!hero) return { newDistance: state.distance, effects: [] };
+export function moveForward(state: GameState, playerId: string): { newPosition: number; effects: GameEffect[] } {
+  const hero = findHeroByPlayerId(state, playerId);
+  if (!hero) return { newPosition: 0, effects: [] };
 
   if (!canMove(hero)) {
-    return { newDistance: state.distance, effects: [] };
+    return { newPosition: hero.position, effects: [] };
   }
 
   const speed = getMoveSpeed(hero);
-  // Wind Walk: Jin moves 2 per round
   const effectiveSpeed = hero.invisibleRounds > 0 ? 2 : speed;
+  const teamIndex = getTeamIndex(state, playerId);
+  const direction = getForwardDirection(teamIndex);
 
-  const newDistance = Math.max(0, state.distance - effectiveSpeed);
+  const newPosition = hero.position + direction * effectiveSpeed;
 
   return {
-    newDistance,
+    newPosition,
     effects: [{
       type: 'move',
       sourceId: playerId,
       targetId: playerId,
-      value: -(state.distance - newDistance),
-      description: `${playerId} moves forward (distance: ${state.distance} -> ${newDistance})`,
+      value: newPosition - hero.position,
+      description: `${playerId} moves forward (position: ${hero.position} → ${newPosition})`,
     }],
   };
 }
 
 /**
- * Move a hero backward (away from opponent). Returns the new distance and effects.
+ * Move a hero backward (away from opponent). Returns the new position and effects.
  */
-export function moveBackward(state: GameState, playerId: string): { newDistance: number; effects: GameEffect[] } {
-  const hero = findHero(state, playerId);
-  if (!hero) return { newDistance: state.distance, effects: [] };
+export function moveBackward(state: GameState, playerId: string): { newPosition: number; effects: GameEffect[] } {
+  const hero = findHeroByPlayerId(state, playerId);
+  if (!hero) return { newPosition: 0, effects: [] };
 
   if (!canMove(hero)) {
-    return { newDistance: state.distance, effects: [] };
+    return { newPosition: hero.position, effects: [] };
   }
 
   const speed = getMoveSpeed(hero);
   const effectiveSpeed = hero.invisibleRounds > 0 ? 2 : speed;
+  const teamIndex = getTeamIndex(state, playerId);
+  const direction = getForwardDirection(teamIndex);
 
-  // Cannot move beyond max distance
-  if (state.distance >= MAX_DISTANCE) {
-    return { newDistance: state.distance, effects: [] };
-  }
-
-  const newDistance = Math.min(MAX_DISTANCE, state.distance + effectiveSpeed);
+  // Backward is opposite of forward
+  const newPosition = hero.position - direction * effectiveSpeed;
 
   return {
-    newDistance,
+    newPosition,
     effects: [{
       type: 'move',
       sourceId: playerId,
       targetId: playerId,
-      value: newDistance - state.distance,
-      description: `${playerId} moves backward (distance: ${state.distance} -> ${newDistance})`,
+      value: newPosition - hero.position,
+      description: `${playerId} moves backward (position: ${hero.position} → ${newPosition})`,
     }],
   };
-}
-
-function findHero(state: GameState, playerId: string): HeroState | undefined {
-  for (const team of state.teams) {
-    for (const player of team.players) {
-      if (player.id === playerId) return player.hero;
-    }
-  }
-  return undefined;
 }

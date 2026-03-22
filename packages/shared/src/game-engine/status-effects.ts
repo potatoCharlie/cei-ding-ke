@@ -1,5 +1,6 @@
 import type { GameState, GameEffect, HeroState, StatusEffect } from '../types/game.js';
 import { getHero } from '../heroes/registry.js';
+import { getDistance } from './position.js';
 
 /**
  * Apply a status effect to a hero.
@@ -9,7 +10,6 @@ export function applyStatusEffect(
   type: StatusEffect['type'],
   duration: number,
 ): void {
-  // Check if already has this effect - refresh duration
   const existing = hero.statusEffects.find(e => e.type === type);
   if (existing) {
     existing.remainingRounds = Math.max(existing.remainingRounds, duration);
@@ -22,8 +22,7 @@ export function applyStatusEffect(
 }
 
 /**
- * Tick all status effects at end of turn, removing expired ones.
- * Returns effects for any damage-over-time or removals.
+ * Tick all status effects, removing expired ones.
  */
 export function tickStatusEffects(state: GameState): GameEffect[] {
   const effects: GameEffect[] = [];
@@ -33,10 +32,9 @@ export function tickStatusEffects(state: GameState): GameEffect[] {
       const hero = player.hero;
       if (!hero.alive) continue;
 
-      // Process Frozen DoT (Shan's Frozen: 10 magic damage per trapped round)
+      // Process Frozen DoT (trapped = frozen, 10 magic damage per round)
       const trappedEffect = hero.statusEffects.find(e => e.type === 'trapped');
       if (trappedEffect) {
-        // Check if this trap was caused by Frozen (has frozen_dot special)
         effects.push({
           type: 'damage',
           sourceId: 'frozen_dot',
@@ -82,13 +80,11 @@ export function tickStatusEffects(state: GameState): GameEffect[] {
 }
 
 /**
- * Apply Nan's passive stink aura damage at distance 0.
+ * Apply Nan's passive stink aura damage when at same position.
+ * Only triggers if heroes were at the same position at BOTH start and end of turn.
  */
 export function applyPassiveEffects(state: GameState): GameEffect[] {
   const effects: GameEffect[] = [];
-
-  // Nan's stink only triggers if players were at distance 0 at BOTH start and end of turn
-  if (state.distance !== 0 || state.distanceAtTurnStart !== 0) return effects;
 
   for (const team of state.teams) {
     for (const player of team.players) {
@@ -96,12 +92,22 @@ export function applyPassiveEffects(state: GameState): GameEffect[] {
       if (!heroDef?.passive || !player.hero.alive) continue;
 
       if (heroDef.passive.trigger === 'distance_0') {
-        // Find opponents
         const opponentTeam = state.teams[1 - team.teamIndex];
         for (const opponent of opponentTeam.players) {
           if (!opponent.hero.alive) continue;
 
-          // Passive still affects invisible heroes (per game rules: Nan affects Jin in Wind Walk)
+          // Check distance NOW
+          const distNow = getDistance(player.hero.position, opponent.hero.position);
+          if (distNow !== 0) continue;
+
+          // Check distance at START of turn
+          const playerStartPos = state.positionsAtTurnStart[player.id];
+          const opponentStartPos = state.positionsAtTurnStart[opponent.id];
+          if (playerStartPos === undefined || opponentStartPos === undefined) continue;
+          const distAtStart = getDistance(playerStartPos, opponentStartPos);
+          if (distAtStart !== 0) continue;
+
+          // Both at same position at start AND end of turn
           effects.push({
             type: 'damage',
             sourceId: player.id,
@@ -119,7 +125,7 @@ export function applyPassiveEffects(state: GameState): GameEffect[] {
 }
 
 /**
- * Check if a hero is stunned (cannot act this round).
+ * Check if a hero is stunned.
  */
 export function isStunned(hero: HeroState): boolean {
   return hero.statusEffects.some(e => e.type === 'stunned');

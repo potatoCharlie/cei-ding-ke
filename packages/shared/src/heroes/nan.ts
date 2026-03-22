@@ -36,7 +36,7 @@ export const nan: HeroDefinition = {
       name: 'Call Fly',
       description: 'Call a fly to sting opponent anywhere on the map. 5 magic damage, heal self 5 HP.',
       minDistance: 0,
-      maxDistance: 3,
+      maxDistance: 99,
       damage: 5,
       damageType: 'magic',
       selfDamage: 0,

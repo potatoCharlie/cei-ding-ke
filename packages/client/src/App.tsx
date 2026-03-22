@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { socket, connectSocket } from './network/socket.js';
 import type { GameState, RPSChoice, PlayerAction, GameEffect } from '@cei-ding-ke/shared';
-import { getAllHeroes } from '@cei-ding-ke/shared';
+import { getAllHeroes, RPS_TIMER, ACTION_TIMER } from '@cei-ding-ke/shared';
 import { HeroSelect } from './components/HeroSelect.js';
 import { RPSPicker } from './components/RPSPicker.js';
 import { ActionPanel } from './components/ActionPanel.js';
-import { BattleHUD } from './components/BattleHUD.js';
 import { GameLog } from './components/GameLog.js';
+import { BattleScene, type FloatingNumber } from './scenes/BattleScene.js';
+import { AnimationManager } from './game/AnimationManager.js';
+import type { BattleAnimation } from './game/AnimationTypes.js';
+import { TimerRope } from './components/TimerRope.js';
 
 type Screen = 'menu' | 'lobby' | 'hero_select' | 'battle' | 'result';
 
@@ -16,7 +19,7 @@ export default function App() {
   const [roomId, setRoomId] = useState('');
   const [joinRoomId, setJoinRoomId] = useState('');
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [rpsResult, setRpsResult] = useState<{ choices: Record<string, RPSChoice>; winners: string[]; draw: boolean } | null>(null);
+  const [rpsResult, setRpsResult] = useState<{ choices: Record<string, RPSChoice>; winners: string[]; losers: string[]; draw: boolean } | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [availableActions, setAvailableActions] = useState<PlayerAction[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
@@ -24,12 +27,31 @@ export default function App() {
   const [error, setError] = useState('');
   const [gameOverWinner, setGameOverWinner] = useState<number | null>(null);
 
+  // Animation state
+  const [activeAnimations, setActiveAnimations] = useState<BattleAnimation[]>([]);
+  const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
+
+  // Timer state
+  const [timerTotal, setTimerTotal] = useState(0);
+  const [timerStart, setTimerStart] = useState(0);
+
+  const animManagerRef = useRef<AnimationManager | null>(null);
+
+  // Initialize animation manager
+  useEffect(() => {
+    animManagerRef.current = new AnimationManager(
+      setActiveAnimations,
+      setFloatingNumbers,
+      () => { /* queue done callback */ },
+    );
+    return () => { animManagerRef.current?.clear(); };
+  }, []);
+
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev.slice(-50), msg]);
   }, []);
 
   useEffect(() => {
-    // Socket event listeners
     socket.on('game:state', (state: GameState) => {
       setGameState(state);
       setScreen('battle');
@@ -37,19 +59,29 @@ export default function App() {
 
     socket.on('game:phase', (data) => {
       addLog(`Phase: ${data.phase} (Turn ${data.turn})`);
-      // Update gameState phase so the UI renders the correct panel
       setGameState(prev => prev ? { ...prev, phase: data.phase, turn: data.turn } : prev);
       if (data.phase === 'rps_submit') {
-        setRpsResult(null);
+        // Don't clear rpsResult if it was a draw — let the "Draw!" UI persist
+        // until the player picks again. Only clear on a fresh new turn's RPS.
+        setRpsResult(prev => (prev?.draw ? prev : null));
         setIsMyTurn(false);
+        setTimerTotal(RPS_TIMER);
+        setTimerStart(Date.now());
       }
     });
 
     socket.on('rps:result', (data) => {
       setRpsResult(data);
+      setTimerTotal(0);
       const myChoice = data.choices[socket.id!];
       const won = data.winners.includes(socket.id!);
-      addLog(`RPS: You chose ${myChoice}. ${data.draw ? 'Draw! Go again.' : won ? 'You win this round!' : 'You lose this round.'}`);
+      if (data.draw) {
+        addLog(`RPS: You chose ${myChoice}. Draw! Go again.`);
+      } else if (won) {
+        addLog(`RPS: You chose ${myChoice}. You win this round!`);
+      } else {
+        addLog(`RPS: ${myChoice ? `You chose ${myChoice}. ` : ''}You lose this round.`);
+      }
     });
 
     socket.on('rps:waiting', (data) => {
@@ -59,6 +91,8 @@ export default function App() {
     socket.on('action:request', (data) => {
       if (data.playerId === socket.id) {
         setIsMyTurn(true);
+        setTimerTotal(ACTION_TIMER);
+        setTimerStart(Date.now());
         addLog('Your turn to act!');
       } else {
         setIsMyTurn(false);
@@ -78,6 +112,12 @@ export default function App() {
         addLog(`  → ${effect.description}`);
       }
       setIsMyTurn(false);
+      setTimerTotal(0);
+
+      // Enqueue animations
+      if (animManagerRef.current && data.effects.length > 0) {
+        animManagerRef.current.enqueueEffects(data.effects, data.action.type);
+      }
     });
 
     socket.on('turn:end', (data) => {
@@ -171,6 +211,7 @@ export default function App() {
 
   const handleRPSChoice = (choice: RPSChoice) => {
     socket.emit('rps:submit', { choice });
+    setRpsResult(null); // Clear draw state when picking again
     addLog(`You chose: ${choice}`);
   };
 
@@ -298,36 +339,40 @@ export default function App() {
     );
   }
 
-  const myTeamIndex = gameState.teams.findIndex(t =>
-    t.players.some(p => p.id === socket.id),
-  );
-  const myTeam = gameState.teams[myTeamIndex];
-  const opponentTeam = gameState.teams[1 - myTeamIndex];
-  const myPlayer = myTeam?.players.find(p => p.id === socket.id);
-  const opponent = opponentTeam?.players[0];
   const phase = gameState.phase as string;
 
   return (
     <div style={styles.container}>
-      <BattleHUD
-        myPlayer={myPlayer!}
-        opponent={opponent!}
-        distance={gameState.distance}
-        turn={gameState.turn}
-        phase={phase}
+      {/* Battle Scene — the visual arena */}
+      <BattleScene
+        gameState={gameState}
+        myPlayerId={socket.id!}
+        activeAnimations={activeAnimations}
+        floatingNumbers={floatingNumbers}
       />
 
+      {/* Timer rope */}
+      {timerTotal > 0 && (
+        <TimerRope totalSeconds={timerTotal} startTime={timerStart} />
+      )}
+
+      {/* RPS Phase */}
       {phase === 'rps_submit' && !rpsResult && (
         <RPSPicker onChoice={handleRPSChoice} />
       )}
 
+      {rpsResult && !rpsResult.draw && (
+        <RPSResultBanner result={rpsResult} myId={socket.id!} />
+      )}
+
       {rpsResult && rpsResult.draw && (
         <div style={styles.card}>
-          <p>Draw! Pick again:</p>
+          <RPSDrawBanner choices={rpsResult.choices} myId={socket.id!} />
           <RPSPicker onChoice={handleRPSChoice} />
         </div>
       )}
 
+      {/* Action Phase */}
       {phase === 'action_phase' && isMyTurn && (
         <ActionPanel
           actions={availableActions}
@@ -338,10 +383,60 @@ export default function App() {
       )}
 
       {phase === 'action_phase' && !isMyTurn && (
-        <p style={{ textAlign: 'center', padding: 16 }}>Waiting for opponent's action...</p>
+        <div style={{
+          textAlign: 'center',
+          padding: 16,
+          color: '#94a3b8',
+          fontStyle: 'italic',
+        }}>
+          Waiting for opponent's action...
+        </div>
       )}
 
+      {/* Game Log */}
       <GameLog logs={logs} />
+    </div>
+  );
+}
+
+const RPS_EMOJI: Record<string, string> = { rock: '✊', paper: '✋', scissors: '✌️' };
+
+/** Shows draw result with both choices. */
+function RPSDrawBanner({ choices, myId }: { choices: Record<string, RPSChoice>; myId: string }) {
+  const myChoice = choices[myId];
+  const oppChoice = Object.entries(choices).find(([id]) => id !== myId)?.[1];
+  return (
+    <div style={{
+      textAlign: 'center',
+      padding: '10px 16px',
+      marginBottom: 12,
+      borderRadius: 8,
+      background: '#fbbf2415',
+      border: '1px solid #fbbf2440',
+    }}>
+      <div style={{ fontSize: 28, marginBottom: 4 }}>
+        {myChoice && RPS_EMOJI[myChoice]} vs {oppChoice && RPS_EMOJI[oppChoice]}
+      </div>
+      <div style={{ color: '#fbbf24', fontWeight: 'bold' }}>Draw! Pick again</div>
+    </div>
+  );
+}
+
+/** Shows RPS result briefly after resolution. */
+function RPSResultBanner({ result, myId }: { result: { winners: string[]; losers: string[]; draw: boolean }; myId: string }) {
+  const won = result.winners.includes(myId);
+  return (
+    <div style={{
+      textAlign: 'center',
+      padding: '8px 16px',
+      borderRadius: 8,
+      background: won ? '#16532520' : '#7f1d1d20',
+      border: `1px solid ${won ? '#22c55e40' : '#ef444440'}`,
+      color: won ? '#4ade80' : '#f87171',
+      fontWeight: 'bold',
+      fontSize: 14,
+    }}>
+      {won ? 'You won RPS! Choose your action.' : 'Opponent won RPS.'}
     </div>
   );
 }
@@ -364,7 +459,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 20,
     display: 'flex',
     flexDirection: 'column',
-    gap: 16,
+    gap: 12,
     minHeight: '100vh',
   },
   title: {

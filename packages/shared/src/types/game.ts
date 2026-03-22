@@ -9,7 +9,7 @@ export type GamePhase =
   | 'turn_end'
   | 'game_over';
 
-export type ActionType = 'move_forward' | 'move_backward' | 'punch' | 'skill' | 'summon';
+export type ActionType = 'move_forward' | 'move_backward' | 'punch' | 'skill' | 'summon' | 'stay';
 
 export type StatusEffectType = 'stunned' | 'trapped' | 'slowed';
 
@@ -22,16 +22,13 @@ export interface StatusEffect {
   movementPenalty?: number;
 }
 
-export interface Position {
-  /** Relative distance between the two sides. 0 = same block, max = 3 */
-  distance: number;
-}
-
 export interface PlayerAction {
   type: ActionType;
   playerId: string;
   skillId?: string;
   targetId?: string;
+  /** If set, this action is for a minion rather than the hero. */
+  minionId?: string;
 }
 
 export interface HeroState {
@@ -39,6 +36,8 @@ export interface HeroState {
   playerId: string;
   hp: number;
   maxHp: number;
+  /** Absolute position on the 1D grid (unbounded). */
+  position: number;
   statusEffects: StatusEffect[];
   /** Track consecutive punches received for stun calculation */
   consecutivePunchesReceived: number;
@@ -56,8 +55,8 @@ export interface MinionState {
   hp: number;
   maxHp: number;
   alive: boolean;
-  /** Distance offset from owner's position */
-  distanceFromOpponent: number;
+  /** Absolute position on the 1D grid (unbounded). */
+  position: number;
   /** Minion type for determining abilities */
   type: string;
   /** Track consecutive punches dealt by this minion */
@@ -109,16 +108,16 @@ export interface GameState {
   phase: GamePhase;
   turn: number;
   teams: [TeamState, TeamState];
-  /** Distance between the two sides */
-  distance: number;
-  /** Distance at the start of the current turn (for passives like Nan's stink) */
-  distanceAtTurnStart: number;
+  /** Snapshot of hero positions at turn start (playerId → position), for passives like Nan's stink */
+  positionsAtTurnStart: Record<string, number>;
   /** Pending RPS choices for current round */
   pendingRPS: Record<string, RPSChoice | null>;
   /** Action order for current turn (player IDs) */
   actionOrder: string[];
   /** Current action index in the order */
   currentActionIndex: number;
+  /** When true, the current player still needs to submit a minion action before advancing. */
+  awaitingMinionAction: boolean;
   /** History of all turns */
   history: TurnRecord[];
   /** Winner team index, null if game ongoing */

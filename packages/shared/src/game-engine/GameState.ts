@@ -3,12 +3,13 @@ import type {
   RPSResult, GameEffect, HeroState, TurnRecord, PlayerState,
 } from '../types/game.js';
 import type { HeroDefinition } from '../types/hero.js';
-import { STARTING_DISTANCE, PUNCH_STUN_THRESHOLD } from '../constants.js';
+import { PUNCH_STUN_THRESHOLD, TEAM_0_START, TEAM_1_START } from '../constants.js';
 import { resolveRPS1v1, randomRPSChoice } from './rps.js';
 import { moveForward, moveBackward } from './movement.js';
 import { executePunch, executeSkill, executeWindWalkPunch } from './combat.js';
 import { applyStatusEffect, tickStatusEffects, applyPassiveEffects, isStunned } from './status-effects.js';
 import { getHero } from '../heroes/registry.js';
+import { getDistance, getForwardDirection, getTeamIndex, isMoveLegal } from './position.js';
 
 /**
  * Create a new game state for a 1v1 match.
@@ -18,36 +19,37 @@ export function createGameState(
   player1: { id: string; name: string; heroId: string },
   player2: { id: string; name: string; heroId: string },
 ): GameState {
+  const p1State = createPlayerState(player1.id, player1.name, player1.heroId, TEAM_0_START);
+  const p2State = createPlayerState(player2.id, player2.name, player2.heroId, TEAM_1_START);
+
+  const positionsAtTurnStart: Record<string, number> = {
+    [player1.id]: TEAM_0_START,
+    [player2.id]: TEAM_1_START,
+  };
+
   return {
     id: gameId,
     mode: '1v1',
     phase: 'rps_submit',
     turn: 1,
     teams: [
-      {
-        teamIndex: 0,
-        players: [createPlayerState(player1.id, player1.name, player1.heroId)],
-      },
-      {
-        teamIndex: 1,
-        players: [createPlayerState(player2.id, player2.name, player2.heroId)],
-      },
+      { teamIndex: 0, players: [p1State] },
+      { teamIndex: 1, players: [p2State] },
     ],
-    distance: STARTING_DISTANCE,
-    distanceAtTurnStart: STARTING_DISTANCE,
+    positionsAtTurnStart,
     pendingRPS: {},
     actionOrder: [],
     currentActionIndex: 0,
+    awaitingMinionAction: false,
     history: [],
     winner: null,
   };
 }
 
-function createPlayerState(id: string, name: string, heroId: string): PlayerState {
+function createPlayerState(id: string, name: string, heroId: string, startPosition: number): PlayerState {
   const heroDef = getHero(heroId);
   const hp = heroDef?.hp ?? 100;
 
-  // Initialize skill uses
   const skillUsesRemaining: Record<string, number> = {};
   if (heroDef) {
     for (const skill of [...heroDef.physicalSkills, ...heroDef.magicSkills]) {
@@ -65,6 +67,7 @@ function createPlayerState(id: string, name: string, heroId: string): PlayerStat
       playerId: id,
       hp,
       maxHp: hp,
+      position: startPosition,
       statusEffects: [],
       consecutivePunchesReceived: 0,
       skillUsesRemaining,
@@ -84,7 +87,6 @@ export function submitRPS(state: GameState, playerId: string, choice: RPSChoice)
   if (state.phase !== 'rps_submit') return false;
   state.pendingRPS[playerId] = choice;
 
-  // Check if all non-stunned players have submitted
   const allPlayers = getAllAlivePlayers(state);
   const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
 
@@ -98,14 +100,12 @@ export function resolveRPSRound(state: GameState): RPSResult {
   const allPlayers = getAllAlivePlayers(state);
   const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
 
-  // Auto-submit for players who didn't submit (timeout)
   for (const player of nonStunnedPlayers) {
     if (state.pendingRPS[player.id] == null) {
       state.pendingRPS[player.id] = randomRPSChoice();
     }
   }
 
-  // 1v1 resolution
   if (state.mode === '1v1' && nonStunnedPlayers.length === 2) {
     const p1 = nonStunnedPlayers[0];
     const p2 = nonStunnedPlayers[1];
@@ -120,13 +120,10 @@ export function resolveRPSRound(state: GameState): RPSResult {
       state.currentActionIndex = 0;
     }
 
-    // Clear pending RPS for next round
     state.pendingRPS = {};
-
     return result;
   }
 
-  // Handle stunned player case: other player auto-wins
   if (state.mode === '1v1' && nonStunnedPlayers.length === 1) {
     const winner = nonStunnedPlayers[0];
     const loser = allPlayers.find(p => p.id !== winner.id)!;
@@ -146,7 +143,6 @@ export function resolveRPSRound(state: GameState): RPSResult {
     return result;
   }
 
-  // Fallback: draw
   state.pendingRPS = {};
   return { choices: {}, winners: [], losers: [], draw: true };
 }
@@ -165,21 +161,40 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
 
   let effects: GameEffect[] = [];
 
+  // ─── Minion action ───
+  if (action.minionId) {
+    if (!state.awaitingMinionAction) return [];
+    effects = executeMinionAction(state, player, action);
+    applyMinionEffects(state, effects);
+    const deathEffects = checkDeaths(state);
+    effects.push(...deathEffects);
+    checkWinCondition(state);
+
+    state.awaitingMinionAction = false;
+    if (state.winner === null) {
+      state.currentActionIndex++;
+      if (state.currentActionIndex >= state.actionOrder.length) {
+        endTurn(state);
+      }
+    }
+    return effects;
+  }
+
+  // ─── Hero action ───
   switch (action.type) {
     case 'move_forward': {
       const result = moveForward(state, action.playerId);
-      state.distance = result.newDistance;
+      player.hero.position = result.newPosition;
       effects = result.effects;
       break;
     }
     case 'move_backward': {
       const result = moveBackward(state, action.playerId);
-      state.distance = result.newDistance;
+      player.hero.position = result.newPosition;
       effects = result.effects;
       break;
     }
     case 'punch': {
-      // Check if hero is in wind walk - exit with special punch
       if (player.hero.invisibleRounds > 0) {
         player.hero.invisibleRounds = 0;
         effects = executeWindWalkPunch(state, action.playerId, action.targetId);
@@ -192,12 +207,10 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
       if (!action.skillId) return [];
       effects = executeSkill(state, action.playerId, action.skillId, action.targetId);
 
-      // Decrement skill uses
       if (effects.length > 0 && player.hero.skillUsesRemaining[action.skillId] !== undefined) {
         player.hero.skillUsesRemaining[action.skillId]--;
       }
 
-      // Handle Wind Walk activation
       if (action.skillId === 'wind_walk') {
         player.hero.invisibleRounds = 3;
         effects = [{
@@ -213,27 +226,180 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
       effects = executeSummon(state, action.playerId);
       break;
     }
+    case 'stay': {
+      effects = [{
+        type: 'move',
+        sourceId: action.playerId,
+        targetId: action.playerId,
+        value: 0,
+        description: `${action.playerId} stays put`,
+      }];
+      break;
+    }
   }
 
-  // Apply effects to game state
   applyEffects(state, effects);
-
-  // Check for deaths
   const deathEffects = checkDeaths(state);
   effects.push(...deathEffects);
-
-  // Check win condition
   checkWinCondition(state);
 
-  // Advance to next action or end turn
   if (state.winner === null) {
-    state.currentActionIndex++;
-    if (state.currentActionIndex >= state.actionOrder.length) {
-      endTurn(state);
+    const hasAliveMinion = player.minions.some(m => m.alive);
+    if (hasAliveMinion) {
+      state.awaitingMinionAction = true;
+    } else {
+      state.currentActionIndex++;
+      if (state.currentActionIndex >= state.actionOrder.length) {
+        endTurn(state);
+      }
     }
   }
 
   return effects;
+}
+
+/**
+ * Execute a minion action (move or punch).
+ */
+function executeMinionAction(
+  state: GameState,
+  player: PlayerState,
+  action: PlayerAction,
+): GameEffect[] {
+  const minion = player.minions.find(m => m.minionId === action.minionId);
+  if (!minion || !minion.alive) return [];
+
+  const heroDef = getHero(player.hero.heroId);
+  const minionDef = heroDef?.minion;
+  if (!minionDef) return [];
+
+  const teamIndex = getTeamIndex(state, player.id);
+  const forward = getForwardDirection(teamIndex);
+  const effects: GameEffect[] = [];
+
+  switch (action.type) {
+    case 'move_forward': {
+      const oldPos = minion.position;
+      minion.position = minion.position + forward * minionDef.moveSpeed;
+      effects.push({
+        type: 'move',
+        sourceId: minion.minionId,
+        targetId: minion.minionId,
+        value: minion.position - oldPos,
+        description: `${minionDef.name} moves forward (position: ${oldPos} → ${minion.position})`,
+      });
+      break;
+    }
+    case 'move_backward': {
+      const oldPos = minion.position;
+      minion.position = minion.position - forward * minionDef.moveSpeed;
+      effects.push({
+        type: 'move',
+        sourceId: minion.minionId,
+        targetId: minion.minionId,
+        value: minion.position - oldPos,
+        description: `${minionDef.name} moves backward (position: ${oldPos} → ${minion.position})`,
+      });
+      break;
+    }
+    case 'punch': {
+      const targetPlayer = action.targetId ? findPlayer(state, action.targetId) : null;
+      if (!targetPlayer || !targetPlayer.hero.alive) return [];
+
+      const dist = getDistance(minion.position, targetPlayer.hero.position);
+      if (dist !== 0) return [];
+
+      effects.push({
+        type: 'damage',
+        sourceId: minion.minionId,
+        targetId: targetPlayer.id,
+        value: minionDef.punchDamage,
+        damageType: 'physical',
+        description: `${minionDef.name} punches for ${minionDef.punchDamage} physical damage`,
+      });
+
+      if (minionDef.punchCountsForStun) {
+        minion.consecutivePunchesDealt++;
+        const newCount = targetPlayer.hero.consecutivePunchesReceived + 1;
+        if (newCount >= PUNCH_STUN_THRESHOLD) {
+          effects.push({
+            type: 'status_apply',
+            sourceId: minion.minionId,
+            targetId: targetPlayer.id,
+            statusEffect: 'stunned',
+            value: 1,
+            description: `${targetPlayer.id} is stunned after ${PUNCH_STUN_THRESHOLD} consecutive punches!`,
+          });
+        }
+      }
+      break;
+    }
+    case 'stay': {
+      effects.push({
+        type: 'move',
+        sourceId: minion.minionId,
+        targetId: minion.minionId,
+        value: 0,
+        description: `${minionDef.name} stays put`,
+      });
+      break;
+    }
+  }
+
+  return effects;
+}
+
+/**
+ * Remove stun when a hero takes damage (wake on hit).
+ * This prevents infinite stun-lock (e.g., Jin's Small Dart).
+ */
+function removeStunOnDamage(hero: HeroState, effects: GameEffect[]): void {
+  const stunIdx = hero.statusEffects.findIndex(e => e.type === 'stunned');
+  if (stunIdx !== -1) {
+    hero.statusEffects.splice(stunIdx, 1);
+    effects.push({
+      type: 'status_remove',
+      sourceId: hero.playerId,
+      targetId: hero.playerId,
+      statusEffect: 'stunned',
+      description: `${hero.playerId} wakes from stun after being hit!`,
+    });
+  }
+}
+
+/**
+ * Apply minion action effects.
+ */
+function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
+  for (const effect of effects) {
+    const target = findPlayer(state, effect.targetId);
+    if (!target) continue;
+
+    switch (effect.type) {
+      case 'damage': {
+        if (target.hero.invisibleRounds > 0 && effect.damageType === 'physical') continue;
+        target.hero.hp -= (effect.value ?? 0);
+        // Stun breaks on damage: wake up stunned heroes when they take damage
+        removeStunOnDamage(target.hero, effects);
+        break;
+      }
+      case 'status_apply': {
+        if (effect.statusEffect) {
+          applyStatusEffect(target.hero, effect.statusEffect, effect.value ?? 1);
+        }
+        break;
+      }
+    }
+
+    if (effect.type === 'damage' && effect.damageType === 'physical' &&
+        effect.description?.includes('punch')) {
+      target.hero.consecutivePunchesReceived++;
+      if (target.hero.consecutivePunchesReceived >= PUNCH_STUN_THRESHOLD) {
+        applyStatusEffect(target.hero, 'stunned', 1);
+        target.hero.consecutivePunchesReceived = 0;
+      }
+    }
+  }
 }
 
 /**
@@ -246,17 +412,10 @@ function applyEffects(state: GameState, effects: GameEffect[]): void {
 
     switch (effect.type) {
       case 'damage': {
-        // Check magic immunity (e.g., Hellfire)
-        if (effect.damageType === 'magic') {
-          // For now, only heroes - minion immunity handled separately
-        }
-
-        // Check if target is invisible and damage is physical/targeted
-        if (target.hero.invisibleRounds > 0 && effect.damageType === 'physical') {
-          continue; // Skip physical damage to invisible target
-        }
-
+        if (target.hero.invisibleRounds > 0 && effect.damageType === 'physical') continue;
         target.hero.hp -= (effect.value ?? 0);
+        // Stun breaks on damage: wake up stunned heroes when they take damage
+        removeStunOnDamage(target.hero, effects);
         break;
       }
       case 'heal': {
@@ -279,7 +438,6 @@ function applyEffects(state: GameState, effects: GameEffect[]): void {
       }
     }
 
-    // Track consecutive punches
     if (effect.type === 'damage' && effect.damageType === 'physical' &&
         effect.description?.includes('punch')) {
       target.hero.consecutivePunchesReceived++;
@@ -298,16 +456,16 @@ function executeSummon(state: GameState, playerId: string): GameEffect[] {
   const heroDef = getHero(player.hero.heroId);
   if (!heroDef?.minion) return [];
 
-  // Check if minion already exists
   if (player.minions.length > 0) return [];
 
+  // Minion spawns at the hero's current position
   player.minions.push({
     minionId: `${heroDef.minion.id}_${playerId}`,
     ownerId: playerId,
     hp: heroDef.minion.hp,
     maxHp: heroDef.minion.hp,
     alive: true,
-    distanceFromOpponent: state.distance,
+    position: player.hero.position,
     type: heroDef.minion.id,
     consecutivePunchesDealt: 0,
   });
@@ -321,40 +479,41 @@ function executeSummon(state: GameState, playerId: string): GameEffect[] {
 }
 
 /**
- * End the current turn: apply passives, advance turn counter.
- * Status effects are NOT ticked here — they tick at the start of the next turn
- * so that effects applied mid-turn (e.g., stun from Magic Burn) persist into the next round.
+ * End the current turn.
  */
 function endTurn(state: GameState): void {
-  // Apply passive effects (e.g., Nan's stink)
   const passiveEffects = applyPassiveEffects(state);
   applyEffects(state, passiveEffects);
 
-  // Check for deaths after passives
   checkDeaths(state);
   checkWinCondition(state);
 
   if (state.winner !== null) return;
 
-  // Reset for next turn
+  // Snapshot positions for next turn's passive checks
+  const posSnap: Record<string, number> = {};
+  for (const team of state.teams) {
+    for (const player of team.players) {
+      posSnap[player.id] = player.hero.position;
+    }
+  }
+
   state.turn++;
   state.phase = 'rps_submit';
-  state.distanceAtTurnStart = state.distance;
+  state.positionsAtTurnStart = posSnap;
   state.pendingRPS = {};
   state.actionOrder = [];
   state.currentActionIndex = 0;
+  state.awaitingMinionAction = false;
 }
 
 /**
- * Start-of-turn processing: tick down status effects and check deaths from DoT.
- * Called by the server AFTER the action phase resolves (i.e., at the beginning of
- * the next turn before RPS), so effects like stun last through one full round.
+ * Start-of-turn processing: tick down status effects.
  */
 export function startTurn(state: GameState): GameEffect[] {
   const tickEffects = tickStatusEffects(state);
   applyEffects(state, tickEffects);
 
-  // Check for deaths from DoT (e.g., Frozen)
   const deathEffects = checkDeaths(state);
   checkWinCondition(state);
 
@@ -385,7 +544,7 @@ function checkWinCondition(state: GameState): void {
   for (let i = 0; i < state.teams.length; i++) {
     const allDead = state.teams[i].players.every(p => !p.hero.alive);
     if (allDead) {
-      state.winner = 1 - i; // Other team wins
+      state.winner = 1 - i;
       state.phase = 'game_over';
       return;
     }
@@ -418,58 +577,68 @@ function getOpponents(state: GameState, playerId: string): PlayerState[] {
 }
 
 /**
- * Get available actions for a player given current game state.
+ * Get available actions for a player.
  */
 export function getAvailableActions(state: GameState, playerId: string): PlayerAction[] {
   const player = findPlayer(state, playerId);
   if (!player || !player.hero.alive) return [];
 
+  if (state.awaitingMinionAction) {
+    return getAvailableMinionActions(state, player);
+  }
+
   const actions: PlayerAction[] = [];
   const hero = player.hero;
   const heroDef = getHero(hero.heroId);
+  const teamIndex = getTeamIndex(state, playerId);
+  const forward = getForwardDirection(teamIndex);
 
-  // Move forward (if not trapped and distance > 0)
-  if (!hero.statusEffects.some(e => e.type === 'trapped') && state.distance > 0) {
-    actions.push({ type: 'move_forward', playerId });
+  // Move forward / backward (if not trapped, and would not exceed max distance from any entity)
+  const isTrapped = hero.statusEffects.some(e => e.type === 'trapped');
+  if (!isTrapped) {
+    const speed = hero.invisibleRounds > 0 ? 2 : (hero.statusEffects.some(e => e.type === 'slowed') ? 0.5 : 1);
+    const fwdPos = hero.position + forward * speed;
+    const bwdPos = hero.position - forward * speed;
+    if (isMoveLegal(state, playerId, fwdPos)) {
+      actions.push({ type: 'move_forward', playerId });
+    }
+    if (isMoveLegal(state, playerId, bwdPos)) {
+      actions.push({ type: 'move_backward', playerId });
+    }
   }
 
-  // Move backward (if not trapped and distance < MAX)
-  if (!hero.statusEffects.some(e => e.type === 'trapped') && state.distance < 3) {
-    actions.push({ type: 'move_backward', playerId });
-  }
-
-  // Get all valid targets (alive opponents)
   const opponents = getOpponents(state, playerId);
 
-  // Punch (distance 0 only) — one action per target
-  if (state.distance === 0) {
-    for (const opp of opponents) {
+  // Punch (distance 0 only)
+  for (const opp of opponents) {
+    if (getDistance(hero.position, opp.hero.position) === 0) {
       actions.push({ type: 'punch', playerId, targetId: opp.id });
     }
   }
 
-  // Skills — one action per (skill, target) pair
+  // Skills
   if (heroDef) {
     const allSkills = [...heroDef.physicalSkills, ...heroDef.magicSkills];
     for (const skill of allSkills) {
-      // Check uses remaining
       const uses = hero.skillUsesRemaining[skill.id];
       if (uses !== undefined && uses <= 0) continue;
 
-      // Check distance
-      if (state.distance >= skill.minDistance && state.distance <= skill.maxDistance) {
-        // Self-targeting skills (e.g., Wind Walk, Kuang self-heal)
-        if (skill.special?.includes('wind_walk')) {
-          actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: playerId });
-        } else if (skill.special?.includes('kuang_self_heal')) {
-          // Kuang can target self (heal) or opponent (damage)
-          actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: playerId });
-          for (const opp of opponents) {
+      // Check distance to each potential target
+      if (skill.special?.includes('wind_walk')) {
+        // Wind Walk: self-target, always available
+        actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: playerId });
+      } else if (skill.special?.includes('kuang_self_heal')) {
+        for (const opp of opponents) {
+          const d = getDistance(hero.position, opp.hero.position);
+          if (d >= skill.minDistance && d <= skill.maxDistance) {
+            actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: playerId });
             actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: opp.id });
           }
-        } else {
-          // Normal offensive skill — one per opponent
-          for (const opp of opponents) {
+        }
+      } else {
+        for (const opp of opponents) {
+          const d = getDistance(hero.position, opp.hero.position);
+          if (d >= skill.minDistance && d <= skill.maxDistance) {
             actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: opp.id });
           }
         }
@@ -480,6 +649,47 @@ export function getAvailableActions(state: GameState, playerId: string): PlayerA
   // Summon
   if (heroDef?.minion && player.minions.length === 0) {
     actions.push({ type: 'summon', playerId });
+  }
+
+  // Stay (do nothing)
+  actions.push({ type: 'stay', playerId });
+
+  return actions;
+}
+
+/**
+ * Get available actions for a player's minions.
+ */
+function getAvailableMinionActions(state: GameState, player: PlayerState): PlayerAction[] {
+  const actions: PlayerAction[] = [];
+  const opponents = getOpponents(state, player.id);
+  const teamIndex = getTeamIndex(state, player.id);
+  const forward = getForwardDirection(teamIndex);
+
+  for (const minion of player.minions) {
+    if (!minion.alive) continue;
+
+    // Minion move forward / backward (constrained by max distance to any entity)
+    const heroDef2 = getHero(player.hero.heroId);
+    const mSpeed = heroDef2?.minion?.moveSpeed ?? 1;
+    const fwdPos = minion.position + forward * mSpeed;
+    const bwdPos = minion.position - forward * mSpeed;
+    if (isMoveLegal(state, minion.minionId, fwdPos)) {
+      actions.push({ type: 'move_forward', playerId: player.id, minionId: minion.minionId });
+    }
+    if (isMoveLegal(state, minion.minionId, bwdPos)) {
+      actions.push({ type: 'move_backward', playerId: player.id, minionId: minion.minionId });
+    }
+
+    // Minion punch (at same position as opponent hero)
+    for (const opp of opponents) {
+      if (getDistance(minion.position, opp.hero.position) === 0) {
+        actions.push({ type: 'punch', playerId: player.id, targetId: opp.id, minionId: minion.minionId });
+      }
+    }
+
+    // Minion stay
+    actions.push({ type: 'stay', playerId: player.id, minionId: minion.minionId });
   }
 
   return actions;

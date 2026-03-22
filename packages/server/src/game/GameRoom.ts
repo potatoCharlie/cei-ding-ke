@@ -282,6 +282,12 @@ export class GameRoom {
     // Send updated state
     this.io.to(this.id).emit('game:state', this.state);
 
+    // If awaiting minion action, request another action from the same player
+    if (this.state.awaitingMinionAction) {
+      this.requestAction();
+      return;
+    }
+
     // If we're back to rps_submit, start new round
     if (currentPhase === 'rps_submit') {
       this.beginRPSPhase();

@@ -2,6 +2,7 @@ import { PUNCH_DAMAGE, PUNCH_STUN_THRESHOLD } from '../constants.js';
 import type { GameState, GameEffect, HeroState, PlayerAction } from '../types/game.js';
 import type { SkillDefinition } from '../types/hero.js';
 import { getHero } from '../heroes/registry.js';
+import { getDistance, getTeamIndex, findHeroByPlayerId, findOpponentHero } from './position.js';
 
 /**
  * Execute a punch action. Can only punch at distance 0.
@@ -11,18 +12,17 @@ export function executePunch(
   attackerId: string,
   targetId?: string,
 ): GameEffect[] {
-  if (state.distance !== 0) return [];
-
-  const attacker = findHero(state, attackerId);
-  const defender = targetId ? findHero(state, targetId) : findOpponentHero(state, attackerId);
+  const attacker = findHeroByPlayerId(state, attackerId);
+  const defender = targetId ? findHeroByPlayerId(state, targetId) : findOpponentHero(state, attackerId);
   if (!attacker || !defender || !defender.alive) return [];
+
+  if (getDistance(attacker.position, defender.position) !== 0) return [];
 
   // Can't punch invisible target
   if (defender.invisibleRounds > 0) return [];
 
   const effects: GameEffect[] = [];
 
-  // Deal punch damage
   effects.push({
     type: 'damage',
     sourceId: attackerId,
@@ -32,7 +32,6 @@ export function executePunch(
     description: `${attackerId} throws a punch for ${PUNCH_DAMAGE} physical damage`,
   });
 
-  // Track consecutive punches
   const newConsecutive = defender.consecutivePunchesReceived + 1;
   if (newConsecutive >= PUNCH_STUN_THRESHOLD) {
     effects.push({
@@ -56,10 +55,11 @@ export function executeWindWalkPunch(
   attackerId: string,
   targetId?: string,
 ): GameEffect[] {
-  if (state.distance !== 0) return [];
+  const attacker = findHeroByPlayerId(state, attackerId);
+  const defender = targetId ? findHeroByPlayerId(state, targetId) : findOpponentHero(state, attackerId);
+  if (!attacker || !defender || !defender.alive) return [];
 
-  const defender = targetId ? findHero(state, targetId) : findOpponentHero(state, attackerId);
-  if (!defender || !defender.alive) return [];
+  if (getDistance(attacker.position, defender.position) !== 0) return [];
 
   const effects: GameEffect[] = [];
 
@@ -72,7 +72,6 @@ export function executeWindWalkPunch(
     description: `${attackerId} exits Wind Walk with a powerful punch for 15 physical damage!`,
   });
 
-  // Wind Walk exit punch also counts toward consecutive punches
   const newConsecutive = defender.consecutivePunchesReceived + 1;
   if (newConsecutive >= PUNCH_STUN_THRESHOLD) {
     effects.push({
@@ -97,7 +96,7 @@ export function executeSkill(
   skillId: string,
   targetId?: string,
 ): GameEffect[] {
-  const caster = findHero(state, casterId);
+  const caster = findHeroByPlayerId(state, casterId);
   if (!caster || !caster.alive) return [];
 
   const heroDef = getHero(caster.heroId);
@@ -107,14 +106,8 @@ export function executeSkill(
   const skill = allSkills.find(s => s.id === skillId);
   if (!skill) return [];
 
-  // Check uses remaining
   const usesRemaining = caster.skillUsesRemaining[skillId];
   if (usesRemaining !== undefined && usesRemaining <= 0) return [];
-
-  // Check distance
-  if (state.distance < skill.minDistance || state.distance > skill.maxDistance) return [];
-
-  const effects: GameEffect[] = [];
 
   // Handle special cases
   if (skill.special?.includes('wind_walk')) {
@@ -125,17 +118,22 @@ export function executeSkill(
     return executeKuangSelfCast(state, casterId, skillId);
   }
 
-  // Find target (default to opponent)
+  // Find target
   const target = targetId
-    ? findHeroById(state, targetId)
+    ? findHeroByPlayerId(state, targetId)
     : findOpponentHero(state, casterId);
 
   if (!target || !target.alive) return [];
 
-  // Check if target is invisible (immune to targeted damage)
+  // Check distance between caster and target
+  const dist = getDistance(caster.position, target.position);
+  if (dist < skill.minDistance || dist > skill.maxDistance) return [];
+
+  // Check if target is invisible
   if (target.invisibleRounds > 0 && skill.damageType === 'physical') return [];
 
-  // Deal damage
+  const effects: GameEffect[] = [];
+
   if (skill.damage > 0) {
     effects.push({
       type: 'damage',
@@ -147,7 +145,6 @@ export function executeSkill(
     });
   }
 
-  // Self damage
   if (skill.selfDamage > 0) {
     effects.push({
       type: 'damage',
@@ -159,7 +156,6 @@ export function executeSkill(
     });
   }
 
-  // Self heal
   if (skill.selfHeal > 0) {
     effects.push({
       type: 'heal',
@@ -170,7 +166,6 @@ export function executeSkill(
     });
   }
 
-  // Apply status effect
   if (skill.appliesStatus && skill.statusDuration) {
     effects.push({
       type: 'status_apply',
@@ -182,7 +177,6 @@ export function executeSkill(
     });
   }
 
-  // Self stun
   if (skill.selfStun) {
     effects.push({
       type: 'status_apply',
@@ -202,7 +196,7 @@ function executeWindWalk(state: GameState, casterId: string): GameEffect[] {
     type: 'status_apply',
     sourceId: casterId,
     targetId: casterId,
-    statusEffect: 'stunned', // Reusing for the effect application tracking
+    statusEffect: 'stunned',
     value: 3,
     description: `${casterId} enters Wind Walk and becomes invisible for 3 rounds!`,
   }];
@@ -219,35 +213,6 @@ function executeKuangSelfCast(state: GameState, casterId: string, skillId: strin
 }
 
 // ─── Helper functions ───
-
-function findHero(state: GameState, playerId: string): HeroState | undefined {
-  for (const team of state.teams) {
-    for (const player of team.players) {
-      if (player.id === playerId) return player.hero;
-    }
-  }
-  return undefined;
-}
-
-function findHeroById(state: GameState, playerId: string): HeroState | undefined {
-  return findHero(state, playerId);
-}
-
-function findOpponentHero(state: GameState, playerId: string): HeroState | undefined {
-  const playerTeamIndex = getTeamIndex(state, playerId);
-  if (playerTeamIndex === -1) return undefined;
-
-  const opponentTeam = state.teams[1 - playerTeamIndex];
-  // In 1v1, return the first alive opponent
-  return opponentTeam.players.find(p => p.hero.alive)?.hero;
-}
-
-function getTeamIndex(state: GameState, playerId: string): number {
-  for (let i = 0; i < state.teams.length; i++) {
-    if (state.teams[i].players.some(p => p.id === playerId)) return i;
-  }
-  return -1;
-}
 
 function getPlayerId(state: GameState, hero: HeroState): string {
   for (const team of state.teams) {

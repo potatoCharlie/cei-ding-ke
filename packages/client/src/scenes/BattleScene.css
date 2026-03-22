@@ -1,0 +1,264 @@
+/* ─── Battle Arena ─── */
+
+.battle-arena {
+  width: 100%;
+  background: linear-gradient(180deg, #0c1222 0%, #16213e 60%, #1a1a2e 100%);
+  border-radius: 12px;
+  border: 1px solid #334155;
+  overflow: hidden;
+  padding: 12px 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ─── Turn Info ─── */
+
+.turn-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.turn-badge {
+  color: #fbbf24;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* ─── Grid: 4 large blocks side by side ─── */
+
+.arena-grid {
+  display: grid;
+  gap: 6px;
+}
+
+/* Each grid cell is a large square */
+.grid-cell {
+  background: #0f172a;
+  border: 2px solid #1e293b;
+  border-radius: 10px;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  position: relative;
+  transition: border-color 0.3s;
+}
+
+.grid-cell:hover {
+  border-color: #334155;
+}
+
+/* Small position label in the corner */
+.grid-cell-label {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 10px;
+  color: #475569;
+  font-weight: bold;
+}
+
+/* Container for entities stacked inside a cell */
+.grid-cell-entities {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding-top: 14px;
+}
+
+/* ─── Entity Card (shared by hero and minion) ─── */
+
+.entity-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  width: 100%;
+}
+
+.entity-label {
+  font-size: 9px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.entity-name {
+  font-size: 11px;
+  font-weight: bold;
+  margin-top: 2px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ─── Hero Sprite ─── */
+
+.hero-sprite {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  border: 3px solid transparent;
+  transition: all 0.3s;
+}
+
+.hero-sprite.active-turn {
+  border-color: #fbbf24;
+  box-shadow: 0 0 12px #fbbf2460;
+}
+
+/* ─── HP Bars ─── */
+
+.hero-hp-bar {
+  height: 5px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+
+.hero-hp-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease-out;
+}
+
+.hero-hp-text {
+  font-size: 10px;
+  font-weight: bold;
+  margin-top: 1px;
+}
+
+/* ─── Minion Entity Card ─── */
+
+.minion-entity-card {
+  background: #1e293b;
+  border: 2px solid #f59e0b40;
+  border-radius: 8px;
+  padding: 4px 6px;
+  transition: all 0.3s;
+}
+
+.minion-entity-card.active {
+  border-color: #fbbf24;
+  box-shadow: 0 0 10px #fbbf2440;
+}
+
+.minion-sprite-icon {
+  font-size: 18px;
+  text-align: center;
+}
+
+.minion-hp-bar {
+  width: 44px;
+  height: 3px;
+  background: #0f172a;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.minion-hp-fill {
+  height: 100%;
+  background: #22c55e;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+
+.minion-hp-text {
+  font-size: 9px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* ─── Status Effect Badges ─── */
+
+.status-badges {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.status-badge {
+  font-size: 12px;
+  animation: statusPop 0.3s ease-out;
+}
+
+/* ─── Floating Damage/Heal Numbers ─── */
+
+.float-number {
+  position: absolute;
+  font-size: 18px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 10;
+  left: 50%;
+  top: 10px;
+  animation: floatUp 0.8s ease-out forwards;
+}
+
+.float-number.damage { color: #ef4444; }
+.float-number.magic-damage { color: #a855f7; }
+.float-number.heal { color: #4ade80; }
+
+/* ─── Keyframe Animations ─── */
+
+@keyframes damageFlash {
+  0% { filter: brightness(1); }
+  20% { filter: brightness(2) saturate(0); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes healPulse {
+  0% { box-shadow: 0 0 0 0 #4ade8060; }
+  50% { box-shadow: 0 0 16px 6px #4ade8040; }
+  100% { box-shadow: 0 0 0 0 #4ade8000; }
+}
+
+@keyframes stunShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(3px); }
+  30% { transform: translateX(-3px); }
+  45% { transform: translateX(2px); }
+  60% { transform: translateX(-2px); }
+  75% { transform: translateX(1px); }
+}
+
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0) translateX(-50%); }
+  100% { opacity: 0; transform: translateY(-30px) translateX(-50%); }
+}
+
+@keyframes statusPop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+@keyframes deathFade {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 0.2; filter: grayscale(1); }
+}
+
+/* ─── Animation utility classes ─── */
+
+.anim-damage { animation: damageFlash 0.4s ease-out, stunShake 0.4s ease-out; }
+.anim-heal { animation: healPulse 0.6s ease-out; }
+.anim-stun { animation: stunShake 0.5s ease-out; }
+.anim-death { animation: deathFade 0.8s ease-out forwards; }
