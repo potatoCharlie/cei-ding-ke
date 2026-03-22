@@ -1,0 +1,19 @@
+{
+  "name": "cei-ding-ke",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "dev:server": "npm run dev --workspace=@cei-ding-ke/server",
+    "dev:client": "npm run dev --workspace=@cei-ding-ke/client",
+    "build:shared": "npm run build --workspace=@cei-ding-ke/shared"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  }
+}
