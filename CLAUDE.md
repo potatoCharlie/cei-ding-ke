@@ -24,6 +24,20 @@ npm run build            # Build all packages (turbo)
 
 Client proxies `/api` and `/socket.io` to `localhost:3001` via Vite config.
 
+## Deployment
+
+Deployed as a single Railway service. The Fastify server serves both the Socket.IO game server and the Vite-built static client.
+
+- **Platform**: Railway (free tier, Nixpacks builder)
+- **Config**: `railway.json` at repo root
+- **Build**: `npm run build` (Turborepo builds shared → client → server)
+- **Start**: `node packages/server/dist/app.js`
+- **Health check**: `GET /api/health`
+- **Static serving**: `@fastify/static` serves `packages/client/dist/` with SPA fallback
+- **CORS**: Configurable via `CORS_ORIGIN` env var (comma-separated), defaults to localhost
+
+Deploys automatically on push to `main` via Railway's GitHub integration.
+
 ## Key Files
 
 | Area | File | Purpose |

@@ -147,8 +147,8 @@ export function simulateBattle(script: BattleScript): BattleLog {
     let startTurnEffects: GameEffect[] = [];
     if (state.turn > 1) {
       startTurnEffects = startTurn(state);
-      // Check if game ended from DoT
-      if (state.phase === 'game_over') {
+      // Check if game ended from DoT (cast needed: startTurn mutates phase but TS can't see it)
+      if ((state.phase as string) === 'game_over') {
         log.push({
           turn: state.turn,
           rpsWinner: turn.rpsWinner,
@@ -176,7 +176,7 @@ export function simulateBattle(script: BattleScript): BattleLog {
 
     // Record log entry
     const entry: BattleLogEntry = {
-      turn: state.turn <= 1 ? i + 1 : state.turn - (state.phase === 'game_over' ? 0 : 1),
+      turn: state.turn <= 1 ? i + 1 : state.turn - ((state.phase as string) === 'game_over' ? 0 : 1),
       rpsWinner: turn.rpsWinner,
       action: turn.action,
       minionAction: turn.minionAction,
@@ -374,7 +374,7 @@ export function simulateRandomMatch(
     let startTurnEffects: GameEffect[] = [];
     if (state.turn > 1) {
       startTurnEffects = startTurn(state);
-      if (state.phase === 'game_over') {
+      if ((state.phase as string) === 'game_over') {
         log.push({
           turn: turn + 1,
           rpsWinner: 'n/a',
