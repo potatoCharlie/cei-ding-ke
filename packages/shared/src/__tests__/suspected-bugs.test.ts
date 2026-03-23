@@ -265,6 +265,75 @@ describe('Suspected bugs — Stun interactions', () => {
   });
 });
 
+describe('Suspected bugs — Small Dart infinite stun-lock', () => {
+  it('1-round stun expires after startTurn tick, preventing infinite stun-lock', () => {
+    // Reproduces the bug: Jin Small Darts → target stunned 1 round → next turn
+    // server must call startTurn (tick effects) BEFORE checking stun for RPS skip.
+    // If stun is checked before tick, the 1-round stun never expires → infinite lock.
+    const state = makeGame('jin', 'shan');
+    setPositions(state, 5, 5);
+
+    // Turn 1: Jin uses Small Dart → target stunned 1 round
+    winRPSForPlayer(state, 'p1');
+    executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'small_dart', targetId: 'p2' });
+
+    expect(getHero(state, 'p2').hp).toBe(95);
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
+    expect(getHero(state, 'p2').statusEffects.find(e => e.type === 'stunned')?.remainingRounds).toBe(1);
+
+    // Simulate what server does at start of next turn: tick effects
+    startTurn(state);
+
+    // After tick, 1-round stun should be GONE → player can participate in RPS
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+  });
+
+  it('2-round stun persists after one tick (player still skips next RPS)', () => {
+    const state = makeGame('jin', 'shan');
+    setPositions(state, 5, 5);
+
+    // Apply a 2-round stun (e.g. from 3-punch combo)
+    getHero(state, 'p2').statusEffects.push({ type: 'stunned', remainingRounds: 2 });
+
+    startTurn(state);
+
+    // After tick, 2-round stun ticked to 1 → still stunned
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
+    expect(getHero(state, 'p2').statusEffects.find(e => e.type === 'stunned')?.remainingRounds).toBe(1);
+  });
+
+  it('repeated Small Darts do not permanently stun-lock (full turn simulation)', () => {
+    const state = makeGame('jin', 'shan');
+    setPositions(state, 5, 5);
+
+    // Turn 1: Small Dart → stun 1 round
+    winRPSForPlayer(state, 'p1');
+    executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'small_dart', targetId: 'p2' });
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
+
+    // Server ticks effects at start of turn 2
+    startTurn(state);
+    // Stun expired → p2 is free
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+
+    // Turn 2: Both players should be able to play RPS now
+    // If p2 can submit RPS, they're not stun-locked
+    submitRPS(state, 'p1', 'rock');
+    const allSubmitted = submitRPS(state, 'p2', 'scissors');
+    expect(allSubmitted).toBe(true);
+
+    // p1 wins, Small Darts again → stun 1 round again
+    resolveRPSRound(state);
+    executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'small_dart', targetId: 'p2' });
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
+
+    // Server ticks effects at start of turn 3
+    startTurn(state);
+    // Stun expired again → not permanently locked
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+  });
+});
+
 describe('Suspected bugs — Invisible interactions', () => {
   it('physical punch misses invisible hero', () => {
     const state = makeGame('shan', 'jin');

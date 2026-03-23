@@ -123,14 +123,9 @@ export class GameRoom {
   private beginRPSPhase(): void {
     if (!this.state) return;
 
-    // Check if any player is stunned BEFORE ticking effects.
-    // Stun applied last turn has remainingRounds=1; ticking would remove it
-    // before we get a chance to detect it. So snapshot stun status first.
-    const allPlayers = this.state.teams.flatMap(t => t.players).filter(p => p.hero.alive);
-    const stunnedPlayers = allPlayers.filter(p => isStunned(p.hero));
-    const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
-
-    // Now tick status effects (decrements durations, applies Frozen DoT, etc.)
+    // Tick status effects first (decrements durations, applies Frozen DoT, etc.)
+    // This must happen BEFORE checking stun so that 1-round stuns expire properly.
+    // Otherwise skills like Small Dart can infinite stun-lock.
     if (this.state.turn > 1) {
       const tickEffects = startTurn(this.state);
       if (tickEffects.length > 0) {
@@ -146,6 +141,11 @@ export class GameRoom {
         return;
       }
     }
+
+    // Check stun AFTER ticking so expired stuns don't cause auto-skip
+    const allPlayers = this.state.teams.flatMap(t => t.players).filter(p => p.hero.alive);
+    const stunnedPlayers = allPlayers.filter(p => isStunned(p.hero));
+    const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
 
     if (stunnedPlayers.length > 0 && nonStunnedPlayers.length > 0) {
       // Auto-resolve: non-stunned player gets to act without RPS
