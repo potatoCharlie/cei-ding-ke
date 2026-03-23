@@ -12,25 +12,58 @@ export function GameLog({ logs }: Props) {
   }, [logs]);
 
   return (
-    <div style={{
-      background: '#0f172a',
-      borderRadius: 8,
-      padding: 12,
-      maxHeight: 200,
-      overflowY: 'auto',
-      border: '1px solid #1e293b',
-      fontSize: 13,
-      fontFamily: 'monospace',
-    }}>
+    <div className="gamelog-container">
       {logs.length === 0 && (
-        <p style={{ color: '#475569' }}>Game log will appear here...</p>
+        <p className="gamelog-empty">Game log will appear here...</p>
       )}
       {logs.map((log, i) => (
-        <div key={i} style={{ color: '#94a3b8', padding: '2px 0' }}>
+        <div
+          key={i}
+          className={`gamelog-entry ${log.startsWith('---') ? 'divider' : ''} ${log.startsWith('  →') ? 'effect' : ''}`}
+        >
           {log}
         </div>
       ))}
       <div ref={bottomRef} />
+
+      <style>{`
+        .gamelog-container {
+          background: var(--bg-deep);
+          border-radius: 10px;
+          padding: 12px 14px;
+          max-height: 180px;
+          overflow-y: auto;
+          border: 1px solid var(--border-dim);
+          font-size: 12px;
+          font-family: 'Chakra Petch', monospace;
+        }
+
+        .gamelog-empty {
+          color: var(--text-dim);
+          font-style: italic;
+        }
+
+        .gamelog-entry {
+          color: var(--text-secondary);
+          padding: 2px 0;
+          line-height: 1.5;
+          border-bottom: 1px solid #ffffff04;
+        }
+
+        .gamelog-entry.divider {
+          color: var(--text-dim);
+          border-bottom: 1px solid var(--border-dim);
+          margin: 4px 0;
+          padding: 4px 0;
+          font-size: 11px;
+        }
+
+        .gamelog-entry.effect {
+          color: var(--text-dim);
+          padding-left: 12px;
+          font-size: 11px;
+        }
+      `}</style>
     </div>
   );
 }

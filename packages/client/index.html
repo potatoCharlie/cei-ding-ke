@@ -4,15 +4,68 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cei Ding Ke</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body {
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-        background: #1a1a2e;
-        color: #eee;
-        min-height: 100vh;
+      :root {
+        --bg-deep: #06080f;
+        --bg-base: #0a0e1a;
+        --bg-surface: #111827;
+        --bg-elevated: #1a2236;
+        --bg-card: #0f1729;
+        --border-dim: #1e293b;
+        --border-base: #2d3a52;
+        --border-bright: #475569;
+        --gold: #f59e0b;
+        --gold-light: #fbbf24;
+        --gold-dim: #b45309;
+        --cyan: #06b6d4;
+        --team-blue: #3b82f6;
+        --team-blue-light: #60a5fa;
+        --team-blue-glow: #3b82f640;
+        --team-red: #ef4444;
+        --team-red-light: #f87171;
+        --team-red-glow: #ef444440;
+        --hp-green: #10b981;
+        --hp-yellow: #f59e0b;
+        --hp-red: #ef4444;
+        --purple: #a855f7;
+        --text-primary: #e2e8f0;
+        --text-secondary: #94a3b8;
+        --text-dim: #64748b;
+        --font-display: 'Silkscreen', cursive;
+        --font-body: 'Chakra Petch', sans-serif;
       }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: var(--font-body);
+        background: var(--bg-deep);
+        color: var(--text-primary);
+        min-height: 100vh;
+        background-image:
+          radial-gradient(ellipse at 50% 0%, #1a1a3e22 0%, transparent 60%),
+          radial-gradient(circle at 20% 80%, #0f172a44 0%, transparent 40%);
+      }
+
       #root { min-height: 100vh; }
+
+      /* Scrollbar styling */
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: var(--bg-deep); }
+      ::-webkit-scrollbar-thumb { background: var(--border-base); border-radius: 2px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+      /* Global animation */
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes pulseGlow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
     </style>
   </head>
   <body>

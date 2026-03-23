@@ -61,8 +61,6 @@ export default function App() {
       addLog(`Phase: ${data.phase} (Turn ${data.turn})`);
       setGameState(prev => prev ? { ...prev, phase: data.phase, turn: data.turn } : prev);
       if (data.phase === 'rps_submit') {
-        // Don't clear rpsResult if it was a draw — let the "Draw!" UI persist
-        // until the player picks again. Only clear on a fresh new turn's RPS.
         setRpsResult(prev => (prev?.draw ? prev : null));
         setIsMyTurn(false);
         setTimerTotal(RPS_TIMER);
@@ -211,7 +209,7 @@ export default function App() {
 
   const handleRPSChoice = (choice: RPSChoice) => {
     socket.emit('rps:submit', { choice });
-    setRpsResult(null); // Clear draw state when picking again
+    setRpsResult(null);
     addLog(`You chose: ${choice}`);
   };
 
@@ -220,96 +218,117 @@ export default function App() {
     setIsMyTurn(false);
   };
 
-  // ─── Render ───
-
+  // ─── MENU ───
   if (screen === 'menu') {
     return (
-      <div style={styles.container}>
-        <h1 style={styles.title}>Cei Ding Ke</h1>
-        <p style={styles.subtitle}>Rock Paper Scissors Battle</p>
+      <div className="app-container">
+        <div className="menu-screen">
+          <div className="menu-header">
+            <h1 className="game-title">Cei Ding Ke</h1>
+            <p className="game-subtitle">Rock Paper Scissors Battle Arena</p>
+            <div className="title-decoration" />
+          </div>
 
-        <div style={styles.card}>
-          <input
-            style={styles.input}
-            placeholder="Your name"
-            value={playerName}
-            onChange={e => setPlayerName(e.target.value)}
-          />
+          <div className="menu-card">
+            <div className="card-header">Enter the Arena</div>
+            <input
+              className="game-input"
+              placeholder="Your battle name..."
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+            />
 
-          <div style={styles.buttonGroup}>
-            <button style={styles.button} onClick={handleCreateRoom}>
+            <button className="game-btn game-btn-primary" onClick={handleCreateRoom}>
               Create Room
             </button>
 
-            <div style={styles.joinRow}>
+            <div className="divider">
+              <span>or join existing</span>
+            </div>
+
+            <div className="join-row">
               <input
-                style={{ ...styles.input, flex: 1 }}
+                className="game-input"
                 placeholder="Room ID"
                 value={joinRoomId}
                 onChange={e => setJoinRoomId(e.target.value)}
+                style={{ marginBottom: 0 }}
               />
-              <button style={styles.button} onClick={handleJoinRoom}>
+              <button className="game-btn game-btn-secondary" onClick={handleJoinRoom}>
                 Join
               </button>
             </div>
           </div>
 
-          {error && <p style={styles.error}>{error}</p>}
+          <div className="menu-card">
+            <div className="card-header">Quick Match</div>
+            <p className="card-hint">Select a hero and find an opponent</p>
+            <div className="hero-mini-grid">
+              {getAllHeroes().map(hero => (
+                <button
+                  key={hero.id}
+                  className={`hero-mini-btn ${selectedHero === hero.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedHero(hero.id)}
+                >
+                  <strong>{hero.name}</strong>
+                  <span className="hero-mini-desc">{hero.description.slice(0, 40)}...</span>
+                </button>
+              ))}
+            </div>
+            <button
+              className="game-btn game-btn-gold"
+              onClick={handleQuickMatch}
+              disabled={!selectedHero || !playerName}
+            >
+              Find Match
+            </button>
+          </div>
+
+          {error && <div className="error-banner">{error}</div>}
         </div>
 
-        <div style={styles.card}>
-          <h3>Quick Match</h3>
-          <p style={{ fontSize: 14, marginBottom: 8 }}>Select a hero and find an opponent:</p>
-          <div style={styles.heroGrid}>
-            {getAllHeroes().map(hero => (
-              <button
-                key={hero.id}
-                style={{
-                  ...styles.heroButton,
-                  ...(selectedHero === hero.id ? styles.heroButtonSelected : {}),
-                }}
-                onClick={() => setSelectedHero(hero.id)}
-              >
-                <strong>{hero.name}</strong>
-                <span style={{ fontSize: 11 }}>{hero.description.slice(0, 40)}...</span>
-              </button>
-            ))}
-          </div>
-          <button
-            style={{ ...styles.button, marginTop: 12, width: '100%' }}
-            onClick={handleQuickMatch}
-            disabled={!selectedHero || !playerName}
-          >
-            Quick Match
-          </button>
-        </div>
+        <style>{menuStyles}</style>
       </div>
     );
   }
 
+  // ─── HERO SELECT ───
   if (screen === 'hero_select') {
     return (
-      <div style={styles.container}>
-        <h2>Select Your Hero</h2>
-        <p>Room: {roomId}</p>
+      <div className="app-container">
+        <div className="screen-header">
+          <h2 className="screen-title">Choose Your Champion</h2>
+          <p className="screen-subtitle">Room: <span className="room-id">{roomId}</span></p>
+        </div>
         <HeroSelect onSelect={handleHeroSelect} />
+        <style>{menuStyles}</style>
       </div>
     );
   }
 
+  // ─── LOBBY ───
   if (screen === 'lobby') {
     return (
-      <div style={styles.container}>
-        <h2>Waiting for Opponent</h2>
-        <p>Room: <strong>{roomId}</strong></p>
-        <p>Share this room ID with your friend!</p>
-        <p>Hero: <strong>{selectedHero}</strong></p>
-        <div style={styles.spinner} />
+      <div className="app-container">
+        <div className="lobby-screen">
+          <div className="lobby-icon">
+            <div className="lobby-spinner" />
+          </div>
+          <h2 className="screen-title">Awaiting Challenger</h2>
+          <div className="room-display">
+            <span className="room-label">Room Code</span>
+            <span className="room-code">{roomId}</span>
+          </div>
+          <p className="lobby-hint">Share this code with your opponent</p>
+          <p className="lobby-hero">Playing as <strong>{selectedHero}</strong></p>
+        </div>
         <GameLog logs={logs} />
+        <style>{menuStyles}</style>
       </div>
     );
   }
 
+  // ─── RESULT ───
   if (screen === 'result') {
     const myTeamIndex = gameState?.teams.findIndex(t =>
       t.players.some(p => p.id === socket.id),
@@ -317,24 +336,32 @@ export default function App() {
     const won = gameOverWinner === myTeamIndex;
 
     return (
-      <div style={styles.container}>
-        <h1 style={{ ...styles.title, color: won ? '#4ade80' : '#f87171' }}>
-          {won ? 'VICTORY!' : 'DEFEAT'}
-        </h1>
-        <button style={styles.button} onClick={() => { setScreen('menu'); socket.disconnect(); }}>
-          Back to Menu
-        </button>
+      <div className="app-container">
+        <div className="result-screen">
+          <div className={`result-banner ${won ? 'victory' : 'defeat'}`}>
+            <h1 className="result-text">{won ? 'VICTORY' : 'DEFEAT'}</h1>
+            <div className="result-glow" />
+          </div>
+          <button className="game-btn game-btn-primary" onClick={() => { setScreen('menu'); socket.disconnect(); }}>
+            Return to Menu
+          </button>
+        </div>
         <GameLog logs={logs} />
+        <style>{menuStyles}</style>
       </div>
     );
   }
 
-  // Battle screen
+  // ─── BATTLE ───
   if (!gameState) {
     return (
-      <div style={styles.container}>
-        <p>Waiting for game to start...</p>
+      <div className="app-container">
+        <div className="lobby-screen">
+          <div className="lobby-spinner" />
+          <p className="screen-subtitle">Waiting for game to start...</p>
+        </div>
         <GameLog logs={logs} />
+        <style>{menuStyles}</style>
       </div>
     );
   }
@@ -342,8 +369,7 @@ export default function App() {
   const phase = gameState.phase as string;
 
   return (
-    <div style={styles.container}>
-      {/* Battle Scene — the visual arena */}
+    <div className="app-container">
       <BattleScene
         gameState={gameState}
         myPlayerId={socket.id!}
@@ -351,12 +377,10 @@ export default function App() {
         floatingNumbers={floatingNumbers}
       />
 
-      {/* Timer rope */}
       {timerTotal > 0 && (
         <TimerRope totalSeconds={timerTotal} startTime={timerStart} />
       )}
 
-      {/* RPS Phase */}
       {phase === 'rps_submit' && !rpsResult && (
         <RPSPicker onChoice={handleRPSChoice} />
       )}
@@ -366,13 +390,12 @@ export default function App() {
       )}
 
       {rpsResult && rpsResult.draw && (
-        <div style={styles.card}>
+        <div className="rps-draw-wrapper">
           <RPSDrawBanner choices={rpsResult.choices} myId={socket.id!} />
           <RPSPicker onChoice={handleRPSChoice} />
         </div>
       )}
 
-      {/* Action Phase */}
       {phase === 'action_phase' && isMyTurn && (
         <ActionPanel
           actions={availableActions}
@@ -383,59 +406,37 @@ export default function App() {
       )}
 
       {phase === 'action_phase' && !isMyTurn && (
-        <div style={{
-          textAlign: 'center',
-          padding: 16,
-          color: '#94a3b8',
-          fontStyle: 'italic',
-        }}>
+        <div className="waiting-banner">
           Waiting for opponent's action...
         </div>
       )}
 
-      {/* Game Log */}
       <GameLog logs={logs} />
+
+      <style>{menuStyles}</style>
     </div>
   );
 }
 
 const RPS_EMOJI: Record<string, string> = { rock: '✊', paper: '✋', scissors: '✌️' };
 
-/** Shows draw result with both choices. */
 function RPSDrawBanner({ choices, myId }: { choices: Record<string, RPSChoice>; myId: string }) {
   const myChoice = choices[myId];
   const oppChoice = Object.entries(choices).find(([id]) => id !== myId)?.[1];
   return (
-    <div style={{
-      textAlign: 'center',
-      padding: '10px 16px',
-      marginBottom: 12,
-      borderRadius: 8,
-      background: '#fbbf2415',
-      border: '1px solid #fbbf2440',
-    }}>
-      <div style={{ fontSize: 28, marginBottom: 4 }}>
+    <div className="rps-draw-banner">
+      <div className="rps-draw-emojis">
         {myChoice && RPS_EMOJI[myChoice]} vs {oppChoice && RPS_EMOJI[oppChoice]}
       </div>
-      <div style={{ color: '#fbbf24', fontWeight: 'bold' }}>Draw! Pick again</div>
+      <div className="rps-draw-text">Draw! Pick again</div>
     </div>
   );
 }
 
-/** Shows RPS result briefly after resolution. */
 function RPSResultBanner({ result, myId }: { result: { winners: string[]; losers: string[]; draw: boolean }; myId: string }) {
   const won = result.winners.includes(myId);
   return (
-    <div style={{
-      textAlign: 'center',
-      padding: '8px 16px',
-      borderRadius: 8,
-      background: won ? '#16532520' : '#7f1d1d20',
-      border: `1px solid ${won ? '#22c55e40' : '#ef444440'}`,
-      color: won ? '#4ade80' : '#f87171',
-      fontWeight: 'bold',
-      fontSize: 14,
-    }}>
+    <div className={`rps-result-banner ${won ? 'won' : 'lost'}`}>
       {won ? 'You won RPS! Choose your action.' : 'Opponent won RPS.'}
     </div>
   );
@@ -452,95 +453,448 @@ function formatAction(action: PlayerAction): string {
   }
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: 600,
-    margin: '0 auto',
-    padding: 20,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-    minHeight: '100vh',
-  },
-  title: {
-    textAlign: 'center',
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#fbbf24',
-  },
-  subtitle: {
-    textAlign: 'center',
-    color: '#94a3b8',
-    marginTop: -12,
-  },
-  card: {
-    background: '#16213e',
-    borderRadius: 12,
-    padding: 20,
-    border: '1px solid #334155',
-  },
-  input: {
-    width: '100%',
-    padding: '10px 14px',
-    borderRadius: 8,
-    border: '1px solid #475569',
-    background: '#0f172a',
-    color: '#eee',
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  button: {
-    padding: '10px 20px',
-    borderRadius: 8,
-    border: 'none',
-    background: '#3b82f6',
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  buttonGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  joinRow: {
-    display: 'flex',
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  error: {
-    color: '#f87171',
-    marginTop: 8,
-  },
-  heroGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 8,
-  },
-  heroButton: {
-    padding: 12,
-    borderRadius: 8,
-    border: '2px solid #334155',
-    background: '#0f172a',
-    color: '#eee',
-    cursor: 'pointer',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    textAlign: 'left',
-  },
-  heroButtonSelected: {
-    borderColor: '#fbbf24',
-    background: '#1e293b',
-  },
-  spinner: {
-    width: 40,
-    height: 40,
-    border: '4px solid #334155',
-    borderTop: '4px solid #3b82f6',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    margin: '20px auto',
-  },
-};
+const menuStyles = `
+  .app-container {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 100vh;
+    animation: fadeIn 0.4s ease-out;
+  }
+
+  .menu-screen {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 24px;
+  }
+
+  .menu-header {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .game-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    color: var(--gold);
+    text-shadow: 0 0 30px #f59e0b40, 0 2px 0 #b4530980;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .game-subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .title-decoration {
+    width: 80px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    margin: 12px auto 0;
+  }
+
+  .menu-card {
+    background: linear-gradient(180deg, var(--bg-elevated), var(--bg-surface));
+    border-radius: 14px;
+    padding: 22px;
+    border: 1px solid var(--border-base);
+    box-shadow: 0 4px 24px #00000040;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card-header {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--gold-light);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .card-hint {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .game-input {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 2px solid var(--border-base);
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 500;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    margin-bottom: 8px;
+  }
+
+  .game-input:focus {
+    border-color: var(--gold-dim);
+    box-shadow: 0 0 0 3px #f59e0b15;
+  }
+
+  .game-input::placeholder {
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  .game-btn {
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .game-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px #00000040;
+  }
+
+  .game-btn:active {
+    transform: translateY(0);
+  }
+
+  .game-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .game-btn-primary {
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    color: white;
+    border-color: #3b82f680;
+    box-shadow: 0 2px 12px #3b82f630;
+  }
+
+  .game-btn-primary:hover {
+    background: linear-gradient(180deg, #60a5fa, #3b82f6);
+    box-shadow: 0 4px 20px #3b82f650;
+  }
+
+  .game-btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-base);
+    padding: 12px 20px;
+    white-space: nowrap;
+  }
+
+  .game-btn-secondary:hover {
+    border-color: var(--border-bright);
+    background: var(--bg-elevated);
+  }
+
+  .game-btn-gold {
+    background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+    color: #1a1a2e;
+    border-color: var(--gold);
+    box-shadow: 0 2px 12px #f59e0b30;
+  }
+
+  .game-btn-gold:hover {
+    background: linear-gradient(180deg, var(--gold-light), var(--gold));
+    box-shadow: 0 4px 20px #f59e0b50;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-dim);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-dim);
+  }
+
+  .join-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .join-row .game-input {
+    flex: 1;
+  }
+
+  .hero-mini-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .hero-mini-btn {
+    padding: 14px;
+    border-radius: 10px;
+    border: 2px solid var(--border-dim);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+    font-family: var(--font-body);
+    transition: all 0.2s;
+  }
+
+  .hero-mini-btn:hover {
+    border-color: var(--border-bright);
+    background: var(--bg-elevated);
+  }
+
+  .hero-mini-btn.selected {
+    border-color: var(--gold);
+    background: linear-gradient(180deg, #f59e0b10, #f59e0b05);
+    box-shadow: 0 0 12px #f59e0b20;
+  }
+
+  .hero-mini-btn strong {
+    color: var(--gold-light);
+    font-size: 14px;
+  }
+
+  .hero-mini-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+
+  .error-banner {
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: #7f1d1d20;
+    border: 1px solid #ef444440;
+    color: var(--team-red-light);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* ─── Screen Header ─── */
+  .screen-header {
+    text-align: center;
+    padding: 16px 0;
+  }
+
+  .screen-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: var(--gold);
+    margin-bottom: 6px;
+    text-shadow: 0 0 20px #f59e0b30;
+  }
+
+  .screen-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .room-id {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-size: 13px;
+  }
+
+  /* ─── Lobby ─── */
+  .lobby-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 48px 0 24px;
+    text-align: center;
+  }
+
+  .lobby-icon {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+
+  .lobby-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border-dim);
+    border-top: 3px solid var(--gold);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .room-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 16px 32px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-base);
+    border-radius: 12px;
+  }
+
+  .room-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .room-code {
+    font-family: var(--font-display);
+    font-size: 20px;
+    color: var(--cyan);
+    text-shadow: 0 0 12px #06b6d430;
+    letter-spacing: 3px;
+  }
+
+  .lobby-hint {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .lobby-hero {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .lobby-hero strong {
+    color: var(--gold-light);
+    font-family: var(--font-display);
+    font-size: 12px;
+  }
+
+  /* ─── Result Screen ─── */
+  .result-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 64px 0 32px;
+  }
+
+  .result-banner {
+    position: relative;
+    text-align: center;
+    padding: 24px 48px;
+  }
+
+  .result-text {
+    font-family: var(--font-display);
+    font-size: 36px;
+    letter-spacing: 6px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .result-banner.victory .result-text {
+    color: #4ade80;
+    text-shadow: 0 0 40px #4ade8060, 0 0 80px #4ade8030;
+  }
+
+  .result-banner.defeat .result-text {
+    color: #f87171;
+    text-shadow: 0 0 40px #f8717160, 0 0 80px #f8717130;
+  }
+
+  .result-glow {
+    position: absolute;
+    inset: -20px;
+    border-radius: 50%;
+    z-index: 0;
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  .result-banner.victory .result-glow {
+    background: radial-gradient(ellipse, #4ade8020, transparent 70%);
+  }
+
+  .result-banner.defeat .result-glow {
+    background: radial-gradient(ellipse, #f8717120, transparent 70%);
+  }
+
+  /* ─── RPS Banners ─── */
+  .rps-draw-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .rps-draw-banner {
+    text-align: center;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #f59e0b10, #f59e0b05);
+    border: 1px solid #fbbf2430;
+  }
+
+  .rps-draw-emojis {
+    font-size: 30px;
+    margin-bottom: 4px;
+  }
+
+  .rps-draw-text {
+    font-family: var(--font-display);
+    color: var(--gold);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  .rps-result-banner {
+    text-align: center;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+  }
+
+  .rps-result-banner.won {
+    background: linear-gradient(180deg, #16532520, #16532510);
+    border: 1px solid #22c55e40;
+    color: #4ade80;
+  }
+
+  .rps-result-banner.lost {
+    background: linear-gradient(180deg, #7f1d1d20, #7f1d1d10);
+    border: 1px solid #ef444440;
+    color: #f87171;
+  }
+
+  /* ─── Waiting Banner ─── */
+  .waiting-banner {
+    text-align: center;
+    padding: 16px;
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 14px;
+  }
+`;

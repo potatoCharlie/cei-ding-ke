@@ -35,7 +35,6 @@ export function ActionPanel({ actions, gameState, playerId, onAction }: Props) {
     return target.name || targetHero?.name || targetId;
   };
 
-  // Resolve minion name if this is a minion action
   const getMinionName = (minionId?: string): string => {
     if (!minionId) return '';
     const minion = player?.minions.find(m => m.minionId === minionId);
@@ -71,19 +70,18 @@ export function ActionPanel({ actions, gameState, playerId, onAction }: Props) {
   const getActionColor = (action: PlayerAction): string => {
     switch (action.type) {
       case 'move_forward':
-      case 'move_backward': return '#22c55e';
+      case 'move_backward': return '#10b981';
       case 'punch': return '#ef4444';
       case 'skill': {
         const skill = allSkills.find(s => s.id === action.skillId);
         return skill?.category === 'physical' ? '#f97316' : '#3b82f6';
       }
-      case 'stay': return '#6b7280';
+      case 'stay': return '#64748b';
       case 'summon': return '#a855f7';
-      default: return '#6b7280';
+      default: return '#64748b';
     }
   };
 
-  // Compute distance to nearest opponent hero
   const getHeroDistance = (): number => {
     if (!player) return 0;
     const myTeamIndex = gameState.teams.findIndex(t => t.players.some(p => p.id === playerId));
@@ -152,7 +150,6 @@ export function ActionPanel({ actions, gameState, playerId, onAction }: Props) {
 
   const getSkillIcon = (action: PlayerAction): string => {
     if (action.minionId) {
-      if (action.type === 'punch') return '🪨';
       return '🪨';
     }
     if (action.type === 'skill') {
@@ -163,17 +160,14 @@ export function ActionPanel({ actions, gameState, playerId, onAction }: Props) {
     return ACTION_ICONS[action.type] || '❓';
   };
 
+  const isMinionTurn = actions.some(a => a.minionId);
+
   return (
-    <div style={{
-      background: '#16213e',
-      borderRadius: 12,
-      padding: 16,
-      border: '2px solid #fbbf24',
-    }}>
-      <h3 style={{ color: '#fbbf24', marginBottom: 10, textAlign: 'center', fontSize: 15 }}>
-        {actions.some(a => a.minionId) ? `🪨 ${heroDef?.minion?.name || 'Minion'}'s Turn` : 'Choose an Action'}
+    <div className="action-container">
+      <h3 className="action-title">
+        {isMinionTurn ? `🪨 ${heroDef?.minion?.name || 'Minion'}'s Turn` : 'Choose an Action'}
       </h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="action-list">
         {actions.map((action, i) => {
           const color = getActionColor(action);
           const isHovered = hoveredIndex === i;
@@ -183,36 +177,130 @@ export function ActionPanel({ actions, gameState, playerId, onAction }: Props) {
               onClick={() => onAction(action)}
               onMouseEnter={() => setHoveredIndex(i)}
               onMouseLeave={() => setHoveredIndex(null)}
+              className={`action-btn ${isHovered ? 'hovered' : ''}`}
               style={{
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: `2px solid ${isHovered ? color : color + '60'}`,
-                background: isHovered ? color + '15' : '#0f172a',
-                color: '#eee',
-                cursor: 'pointer',
-                textAlign: 'left',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                transition: 'all 0.15s',
-                transform: isHovered ? 'translateX(4px)' : 'none',
-              }}
+                '--action-color': color,
+                '--action-color-dim': color + '40',
+                '--action-color-bg': color + '10',
+                animationDelay: `${i * 0.05}s`,
+              } as React.CSSProperties}
             >
-              <span style={{ fontSize: 20, width: 28, textAlign: 'center' }}>
-                {getSkillIcon(action)}
-              </span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 'bold', color, fontSize: 14 }}>
-                  {getActionLabel(action)}
-                </div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
-                  {getActionDescription(action)}
-                </div>
+              <span className="action-icon">{getSkillIcon(action)}</span>
+              <div className="action-info">
+                <div className="action-label" style={{ color }}>{getActionLabel(action)}</div>
+                <div className="action-desc">{getActionDescription(action)}</div>
               </div>
+              <div className="action-arrow">›</div>
             </button>
           );
         })}
       </div>
+
+      <style>{`
+        .action-container {
+          background: linear-gradient(180deg, var(--bg-elevated), var(--bg-surface));
+          border-radius: 14px;
+          padding: 18px;
+          border: 2px solid var(--gold-dim);
+          box-shadow: 0 0 20px #f59e0b15, 0 4px 24px #00000040;
+        }
+
+        .action-title {
+          font-family: var(--font-display);
+          font-size: 11px;
+          color: var(--gold);
+          text-align: center;
+          margin-bottom: 12px;
+          letter-spacing: 1px;
+          text-shadow: 0 0 12px #f59e0b30;
+        }
+
+        .action-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .action-btn {
+          padding: 11px 14px;
+          border-radius: 10px;
+          border: 2px solid var(--action-color-dim);
+          background: var(--bg-card);
+          color: var(--text-primary);
+          cursor: pointer;
+          text-align: left;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          transition: all 0.15s ease;
+          font-family: var(--font-body);
+          animation: fadeIn 0.25s ease-out both;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .action-btn::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 3px;
+          background: var(--action-color);
+          opacity: 0;
+          transition: opacity 0.15s;
+        }
+
+        .action-btn.hovered {
+          border-color: var(--action-color);
+          background: var(--action-color-bg);
+          transform: translateX(4px);
+          box-shadow: 0 2px 12px #00000030;
+        }
+
+        .action-btn.hovered::before {
+          opacity: 1;
+        }
+
+        .action-icon {
+          font-size: 22px;
+          width: 32px;
+          text-align: center;
+          flex-shrink: 0;
+        }
+
+        .action-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .action-label {
+          font-weight: 700;
+          font-size: 14px;
+          line-height: 1.3;
+        }
+
+        .action-desc {
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 1px;
+          line-height: 1.3;
+        }
+
+        .action-arrow {
+          font-size: 20px;
+          color: var(--text-dim);
+          opacity: 0;
+          transition: all 0.15s;
+          transform: translateX(-4px);
+        }
+
+        .action-btn.hovered .action-arrow {
+          opacity: 1;
+          transform: translateX(0);
+          color: var(--action-color);
+        }
+      `}</style>
     </div>
   );
 }
