@@ -348,24 +348,27 @@ function executeMinionAction(
  * Remove stun when a hero takes damage (wake on hit).
  * This prevents infinite stun-lock (e.g., Jin's Small Dart).
  */
-function removeStunOnDamage(hero: HeroState, effects: GameEffect[]): void {
+function removeStunOnDamage(hero: HeroState): GameEffect | null {
   const stunIdx = hero.statusEffects.findIndex(e => e.type === 'stunned');
   if (stunIdx !== -1) {
     hero.statusEffects.splice(stunIdx, 1);
-    effects.push({
+    return {
       type: 'status_remove',
       sourceId: hero.playerId,
       targetId: hero.playerId,
       statusEffect: 'stunned',
       description: `${hero.playerId} wakes from stun after being hit!`,
-    });
+    };
   }
+  return null;
 }
 
 /**
  * Apply minion action effects.
  */
 function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
+  const sideEffects: GameEffect[] = [];
+
   for (const effect of effects) {
     const target = findPlayer(state, effect.targetId);
     if (!target) continue;
@@ -375,7 +378,8 @@ function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
         if (target.hero.invisibleRounds > 0 && effect.damageType === 'physical') continue;
         target.hero.hp -= (effect.value ?? 0);
         // Stun breaks on damage: wake up stunned heroes when they take damage
-        removeStunOnDamage(target.hero, effects);
+        const stunBreak = removeStunOnDamage(target.hero);
+        if (stunBreak) sideEffects.push(stunBreak);
         break;
       }
       case 'status_apply': {
@@ -387,6 +391,9 @@ function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
     }
     // Minion punches do NOT count toward 3-punch stun
   }
+
+  // Append stun-break effects after main iteration so they don't interfere
+  effects.push(...sideEffects);
 }
 
 /**
@@ -395,6 +402,8 @@ function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
  * not for passive/DoT damage like stink aura or frozen).
  */
 function applyEffects(state: GameState, effects: GameEffect[], breakStun = false): void {
+  const sideEffects: GameEffect[] = [];
+
   for (const effect of effects) {
     const target = findPlayer(state, effect.targetId);
     if (!target) continue;
@@ -404,7 +413,8 @@ function applyEffects(state: GameState, effects: GameEffect[], breakStun = false
         if (target.hero.invisibleRounds > 0 && effect.damageType === 'physical') continue;
         target.hero.hp -= (effect.value ?? 0);
         if (breakStun) {
-          removeStunOnDamage(target.hero, effects);
+          const stunBreak = removeStunOnDamage(target.hero);
+          if (stunBreak) sideEffects.push(stunBreak);
         }
         break;
       }
@@ -437,6 +447,9 @@ function applyEffects(state: GameState, effects: GameEffect[], breakStun = false
       }
     }
   }
+
+  // Append stun-break effects after main iteration so they don't interfere
+  effects.push(...sideEffects);
 }
 
 function executeSummon(state: GameState, playerId: string): GameEffect[] {

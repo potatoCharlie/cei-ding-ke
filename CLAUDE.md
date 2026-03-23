@@ -72,7 +72,8 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 - UI uses CSS custom properties defined in `index.html` (`--bg-deep`, `--gold`, `--team-blue`, etc.)
 - Fonts: `Silkscreen` (pixel display font for headings/badges), `Chakra Petch` (body text) via Google Fonts
 - Component styles use `<style>` tags with class-based CSS; BattleScene uses a separate `.css` file
-- No test framework yet — manual playtesting only
+- Test framework: Vitest (in `packages/shared`). Run `npm test` or `cd packages/shared && npx vitest run`
+- Test helpers in `packages/shared/src/__tests__/helpers.ts` (`makeGame`, `winRPSForPlayer`, `setPositions`, `getHero`, `getPlayer`)
 - No linter configured yet
 
 ## Common Workflows
@@ -101,6 +102,29 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 - **Client**: Menu → Hero Select → Lobby → Battle → Result, retro pixel-art arena UI, team colors
 - **Server**: Socket.IO rooms (create/join/quick match), authoritative state, phase timeouts
 
+## Testing
+
+213 unit tests in `packages/shared` covering all game logic (zero server/client needed):
+
+| Test file | Coverage area |
+|-----------|---------------|
+| `rps.test.ts` | All 9 RPS combos, resolution, random choice |
+| `position.test.ts` | Distance, direction, entity positions, MAX_DISTANCE |
+| `movement.test.ts` | Speed modifiers, trapped/invisible, forward/backward |
+| `combat.test.ts` | Punch, Wind Walk punch, all skills, invisible interactions |
+| `status-effects.test.ts` | Apply/tick/expire, Frozen DoT, stink aura |
+| `GameState.test.ts` | Full state machine: RPS → action → effects → death → game over |
+| `nan/shan/gao/jin.test.ts` | Per-hero skill behavior and edge cases |
+| `scenarios.test.ts` | Multi-turn combos (3-punch stun, stealth approach, summon+minion) |
+| `edge-cases.test.ts` | 1 HP death, heal cap, negative positions, multiple effects |
+| `suspected-bugs.test.ts` | Magic immunity, minion stun-break, punch counter resets, stun interactions |
+| `available-actions.test.ts` | getAvailableActions for all action types and constraints |
+| `advanced-scenarios.test.ts` | Skill interactions, multi-turn combat, game over conditions, position mechanics |
+
+## Known Design Gaps
+
+- **Hellfire magic immunity**: `immuneTo: ['magic']` is defined on the minion but not enforced — minions can't be targeted by skills yet, so it's moot. Must be implemented when minion targeting is added.
+
 ## What's Next
 
 - **Playtesting & balance tuning** — all mechanics are in, needs real play sessions
@@ -108,4 +132,4 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 - **Accounts & persistence** — database, auth, player profiles, match history
 - **Audio & visual polish** — sound effects, animations, pixel art assets
 - **Social features** — chat, friends, leaderboards
-- **Infrastructure** — tests, deployment, error monitoring
+- **Infrastructure** — deployment, error monitoring
