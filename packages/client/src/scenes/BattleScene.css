@@ -82,14 +82,45 @@
   align-items: center;
   position: relative;
   width: 100%;
+  padding: 6px 4px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  transition: all 0.3s;
+}
+
+/* ─── Team differentiation: MY team (blue) ─── */
+
+.hero-card.is-me {
+  background: #1e3a5f30;
+  border-color: #3b82f650;
+  box-shadow: 0 0 8px #3b82f620;
+}
+
+/* ─── Team differentiation: ENEMY team (red) ─── */
+
+.hero-card.is-enemy {
+  background: #5f1e1e30;
+  border-color: #ef444450;
 }
 
 .entity-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: bold;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 2px;
+  letter-spacing: 1.5px;
+  margin-bottom: 3px;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.hero-card.is-me .entity-label {
+  background: #3b82f630;
+  color: #60a5fa;
+}
+
+.hero-card.is-enemy .entity-label {
+  background: #ef444430;
+  color: #f87171;
 }
 
 .entity-name {
@@ -103,23 +134,46 @@
   max-width: 100%;
 }
 
+.hero-card.is-me .entity-name {
+  color: #93c5fd;
+}
+
+.hero-card.is-enemy .entity-name {
+  color: #fca5a5;
+}
+
 /* ─── Hero Sprite ─── */
 
 .hero-sprite {
-  width: 48px;
-  height: 48px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
   border: 3px solid transparent;
   transition: all 0.3s;
 }
 
+/* My hero: larger with golden-blue border */
+.hero-card.is-me .hero-sprite {
+  width: 56px;
+  height: 56px;
+  font-size: 28px;
+  border-color: #60a5fa80;
+  box-shadow: 0 0 10px #3b82f630;
+}
+
+/* Enemy hero: smaller, dimmer */
+.hero-card.is-enemy .hero-sprite {
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+  border-color: #ef444440;
+  opacity: 0.9;
+}
+
 .hero-sprite.active-turn {
-  border-color: #fbbf24;
-  box-shadow: 0 0 12px #fbbf2460;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 14px #fbbf2460 !important;
 }
 
 /* ─── HP Bars ─── */
@@ -130,6 +184,16 @@
   border-radius: 3px;
   overflow: hidden;
   margin-top: 3px;
+}
+
+.hero-card.is-me .hero-hp-bar {
+  width: 64px;
+  height: 6px;
+}
+
+.hero-card.is-enemy .hero-hp-bar {
+  width: 48px;
+  height: 4px;
 }
 
 .hero-hp-fill {
@@ -144,14 +208,26 @@
   margin-top: 1px;
 }
 
+.hero-card.is-enemy .hero-hp-text {
+  font-size: 9px;
+}
+
 /* ─── Minion Entity Card ─── */
 
 .minion-entity-card {
-  background: #1e293b;
-  border: 2px solid #f59e0b40;
   border-radius: 8px;
   padding: 4px 6px;
   transition: all 0.3s;
+}
+
+.minion-entity-card.is-me {
+  background: #1e3a5f40;
+  border: 2px solid #3b82f640;
+}
+
+.minion-entity-card.is-enemy {
+  background: #5f1e1e30;
+  border: 2px solid #ef444430;
 }
 
 .minion-entity-card.active {

@@ -13,7 +13,7 @@ export const gao: HeroDefinition = {
     description: 'A powerful minion with 100HP, immune to magic. Punches deal 20 physical damage.',
     hp: 100,
     punchDamage: 20,
-    punchCountsForStun: true,
+    punchCountsForStun: false,
     immuneTo: ['magic'],
     moveSpeed: 1,
   },

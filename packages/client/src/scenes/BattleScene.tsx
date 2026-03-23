@@ -109,7 +109,6 @@ export function BattleScene({ gameState, myPlayerId, activeAnimations, floatingN
           const entities = cells.get(pos) ?? [];
           return (
             <div key={pos} className="grid-cell">
-              <div className="grid-cell-label">{pos}</div>
               <div className="grid-cell-entities">
                 {entities.map((ent) => {
                   if (ent.kind === 'hero') {
@@ -129,6 +128,7 @@ export function BattleScene({ gameState, myPlayerId, activeAnimations, floatingN
                         key={ent.minion.minionId}
                         minion={ent.minion}
                         owner={ent.owner}
+                        isMe={ent.isMe}
                         isActiveTurn={isMinionTurn && ent.isMe}
                       />
                     );
@@ -192,7 +192,7 @@ function HeroCard({
         <div key={fn.id} className={`float-number ${fn.type}`}>{fn.text}</div>
       ))}
 
-      <div className="entity-label" style={{ color: isMe ? '#3b82f6' : '#ef4444' }}>
+      <div className="entity-label">
         {isMe ? 'YOU' : 'ENEMY'}
       </div>
 
@@ -200,7 +200,6 @@ function HeroCard({
         className={`hero-sprite${isActiveTurn ? ' active-turn' : ''}`}
         style={{
           background: visual.bgGradient,
-          borderColor: isActiveTurn ? '#fbbf24' : visual.color + '60',
           opacity: isInvisible ? 0.3 : 1,
         }}
       >
@@ -209,7 +208,7 @@ function HeroCard({
 
       <div className="entity-name">{player.name || visual.label}</div>
 
-      <div className="hero-hp-bar" style={{ width: 60 }}>
+      <div className="hero-hp-bar">
         <div className="hero-hp-fill" style={{ width: `${hpPercent}%`, background: hpColor }} />
       </div>
       <div className="hero-hp-text" style={{ color: hpColor }}>{hero.hp}/{hero.maxHp}</div>
@@ -228,10 +227,12 @@ function HeroCard({
 function MinionCard({
   minion,
   owner,
+  isMe,
   isActiveTurn,
 }: {
   minion: MinionState;
   owner: PlayerState;
+  isMe: boolean;
   isActiveTurn: boolean;
 }) {
   const heroDef = getHero(owner.hero.heroId);
@@ -240,9 +241,9 @@ function MinionCard({
   const hpPercent = Math.max(0, (minion.hp / minion.maxHp) * 100);
 
   return (
-    <div className={`entity-card minion-entity-card${isActiveTurn ? ' active' : ''}`}>
-      <div className="minion-sprite-icon">🪨</div>
-      <div className="entity-name" style={{ color: '#f59e0b', fontSize: 10 }}>{name}</div>
+    <div className={`entity-card minion-entity-card ${isMe ? 'is-me' : 'is-enemy'}${isActiveTurn ? ' active' : ''}`}>
+      <div className="minion-sprite-icon">{isMe ? '🪨' : '🪨'}</div>
+      <div className="entity-name" style={{ color: isMe ? '#60a5fa' : '#f87171', fontSize: 10 }}>{name}</div>
       <div className="minion-hp-bar">
         <div className="minion-hp-fill" style={{ width: `${hpPercent}%` }} />
       </div>

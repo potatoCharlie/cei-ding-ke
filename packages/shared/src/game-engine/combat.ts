@@ -1,4 +1,4 @@
-import { PUNCH_DAMAGE, PUNCH_STUN_THRESHOLD } from '../constants.js';
+import { PUNCH_DAMAGE } from '../constants.js';
 import type { GameState, GameEffect, HeroState, PlayerAction } from '../types/game.js';
 import type { SkillDefinition } from '../types/hero.js';
 import { getHero } from '../heroes/registry.js';
@@ -32,18 +32,7 @@ export function executePunch(
     description: `${attackerId} throws a punch for ${PUNCH_DAMAGE} physical damage`,
   });
 
-  const newConsecutive = defender.consecutivePunchesReceived + 1;
-  if (newConsecutive >= PUNCH_STUN_THRESHOLD) {
-    effects.push({
-      type: 'status_apply',
-      sourceId: attackerId,
-      targetId: getPlayerId(state, defender),
-      statusEffect: 'stunned',
-      value: 1,
-      description: `${getPlayerId(state, defender)} is stunned after ${PUNCH_STUN_THRESHOLD} consecutive punches!`,
-    });
-  }
-
+  // 3-punch stun is tracked and applied in GameState.applyEffects
   return effects;
 }
 
@@ -72,18 +61,7 @@ export function executeWindWalkPunch(
     description: `${attackerId} exits Wind Walk with a powerful punch for 15 physical damage!`,
   });
 
-  const newConsecutive = defender.consecutivePunchesReceived + 1;
-  if (newConsecutive >= PUNCH_STUN_THRESHOLD) {
-    effects.push({
-      type: 'status_apply',
-      sourceId: attackerId,
-      targetId: getPlayerId(state, defender),
-      statusEffect: 'stunned',
-      value: 1,
-      description: `${getPlayerId(state, defender)} is stunned after ${PUNCH_STUN_THRESHOLD} consecutive punches!`,
-    });
-  }
-
+  // 3-punch stun is tracked and applied in GameState.applyEffects
   return effects;
 }
 

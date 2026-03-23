@@ -9,7 +9,7 @@ import { moveForward, moveBackward } from './movement.js';
 import { executePunch, executeSkill, executeWindWalkPunch } from './combat.js';
 import { applyStatusEffect, tickStatusEffects, applyPassiveEffects, isStunned } from './status-effects.js';
 import { getHero } from '../heroes/registry.js';
-import { getDistance, getForwardDirection, getTeamIndex, isMoveLegal } from './position.js';
+import { getDistance, getForwardDirection, getTeamIndex, isMoveLegal, findOpponentHero } from './position.js';
 
 /**
  * Create a new game state for a 1v1 match.
@@ -180,6 +180,14 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
     return effects;
   }
 
+  // If hero does anything other than punch, reset opponents' consecutive punch counters
+  if (!action.minionId && action.type !== 'punch') {
+    const opponents = state.teams.flatMap(t => t.players).filter(p => p.id !== action.playerId);
+    for (const opp of opponents) {
+      opp.hero.consecutivePunchesReceived = 0;
+    }
+  }
+
   // ─── Hero action ───
   switch (action.type) {
     case 'move_forward': {
@@ -238,7 +246,7 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
     }
   }
 
-  applyEffects(state, effects);
+  applyEffects(state, effects, true);
   const deathEffects = checkDeaths(state);
   effects.push(...deathEffects);
   checkWinCondition(state);
@@ -274,31 +282,32 @@ function executeMinionAction(
   if (!minionDef) return [];
 
   const teamIndex = getTeamIndex(state, player.id);
-  const forward = getForwardDirection(teamIndex);
+  const oppHero = findOpponentHero(state, player.id);
+  const towardEnemy = getTowardEnemyDirection(minion.position, oppHero, teamIndex);
   const effects: GameEffect[] = [];
 
   switch (action.type) {
     case 'move_forward': {
       const oldPos = minion.position;
-      minion.position = minion.position + forward * minionDef.moveSpeed;
+      minion.position = minion.position + towardEnemy * minionDef.moveSpeed;
       effects.push({
         type: 'move',
         sourceId: minion.minionId,
         targetId: minion.minionId,
         value: minion.position - oldPos,
-        description: `${minionDef.name} moves forward (position: ${oldPos} → ${minion.position})`,
+        description: `${minionDef.name} moves toward enemy (position: ${oldPos} → ${minion.position})`,
       });
       break;
     }
     case 'move_backward': {
       const oldPos = minion.position;
-      minion.position = minion.position - forward * minionDef.moveSpeed;
+      minion.position = minion.position - towardEnemy * minionDef.moveSpeed;
       effects.push({
         type: 'move',
         sourceId: minion.minionId,
         targetId: minion.minionId,
         value: minion.position - oldPos,
-        description: `${minionDef.name} moves backward (position: ${oldPos} → ${minion.position})`,
+        description: `${minionDef.name} moves away from enemy (position: ${oldPos} → ${minion.position})`,
       });
       break;
     }
@@ -317,21 +326,7 @@ function executeMinionAction(
         damageType: 'physical',
         description: `${minionDef.name} punches for ${minionDef.punchDamage} physical damage`,
       });
-
-      if (minionDef.punchCountsForStun) {
-        minion.consecutivePunchesDealt++;
-        const newCount = targetPlayer.hero.consecutivePunchesReceived + 1;
-        if (newCount >= PUNCH_STUN_THRESHOLD) {
-          effects.push({
-            type: 'status_apply',
-            sourceId: minion.minionId,
-            targetId: targetPlayer.id,
-            statusEffect: 'stunned',
-            value: 1,
-            description: `${targetPlayer.id} is stunned after ${PUNCH_STUN_THRESHOLD} consecutive punches!`,
-          });
-        }
-      }
+      // Minion punches do NOT count toward 3-punch stun
       break;
     }
     case 'stay': {
@@ -390,22 +385,16 @@ function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
         break;
       }
     }
-
-    if (effect.type === 'damage' && effect.damageType === 'physical' &&
-        effect.description?.includes('punch')) {
-      target.hero.consecutivePunchesReceived++;
-      if (target.hero.consecutivePunchesReceived >= PUNCH_STUN_THRESHOLD) {
-        applyStatusEffect(target.hero, 'stunned', 1);
-        target.hero.consecutivePunchesReceived = 0;
-      }
-    }
+    // Minion punches do NOT count toward 3-punch stun
   }
 }
 
 /**
  * Apply effects to the game state (mutates state).
+ * When breakStun is true, damage will wake stunned heroes (for active attacks only,
+ * not for passive/DoT damage like stink aura or frozen).
  */
-function applyEffects(state: GameState, effects: GameEffect[]): void {
+function applyEffects(state: GameState, effects: GameEffect[], breakStun = false): void {
   for (const effect of effects) {
     const target = findPlayer(state, effect.targetId);
     if (!target) continue;
@@ -414,8 +403,9 @@ function applyEffects(state: GameState, effects: GameEffect[]): void {
       case 'damage': {
         if (target.hero.invisibleRounds > 0 && effect.damageType === 'physical') continue;
         target.hero.hp -= (effect.value ?? 0);
-        // Stun breaks on damage: wake up stunned heroes when they take damage
-        removeStunOnDamage(target.hero, effects);
+        if (breakStun) {
+          removeStunOnDamage(target.hero, effects);
+        }
         break;
       }
       case 'heal': {
@@ -553,6 +543,18 @@ function checkWinCondition(state: GameState): void {
 
 // ─── Utility functions ───
 
+/**
+ * Get the direction (+1 or -1) that moves toward the nearest enemy.
+ * Forward = toward enemy, backward = away from enemy.
+ */
+function getTowardEnemyDirection(myPos: number, oppHero: HeroState | undefined, teamIndex: number): 1 | -1 {
+  if (!oppHero || oppHero.position === myPos) {
+    // At same position or no opponent: fall back to team-based direction
+    return getForwardDirection(teamIndex);
+  }
+  return oppHero.position > myPos ? 1 : -1;
+}
+
 function getAllAlivePlayers(state: GameState): PlayerState[] {
   return state.teams.flatMap(t => t.players.filter(p => p.hero.alive));
 }
@@ -590,15 +592,17 @@ export function getAvailableActions(state: GameState, playerId: string): PlayerA
   const actions: PlayerAction[] = [];
   const hero = player.hero;
   const heroDef = getHero(hero.heroId);
-  const teamIndex = getTeamIndex(state, playerId);
-  const forward = getForwardDirection(teamIndex);
+
+  // Direction toward nearest enemy
+  const oppHero = findOpponentHero(state, playerId);
+  const towardEnemy = getTowardEnemyDirection(hero.position, oppHero, getTeamIndex(state, playerId));
 
   // Move forward / backward (if not trapped, and would not exceed max distance from any entity)
   const isTrapped = hero.statusEffects.some(e => e.type === 'trapped');
   if (!isTrapped) {
     const speed = hero.invisibleRounds > 0 ? 2 : (hero.statusEffects.some(e => e.type === 'slowed') ? 0.5 : 1);
-    const fwdPos = hero.position + forward * speed;
-    const bwdPos = hero.position - forward * speed;
+    const fwdPos = hero.position + towardEnemy * speed;
+    const bwdPos = hero.position - towardEnemy * speed;
     if (isMoveLegal(state, playerId, fwdPos)) {
       actions.push({ type: 'move_forward', playerId });
     }
@@ -663,17 +667,18 @@ export function getAvailableActions(state: GameState, playerId: string): PlayerA
 function getAvailableMinionActions(state: GameState, player: PlayerState): PlayerAction[] {
   const actions: PlayerAction[] = [];
   const opponents = getOpponents(state, player.id);
+  const oppHero = findOpponentHero(state, player.id);
   const teamIndex = getTeamIndex(state, player.id);
-  const forward = getForwardDirection(teamIndex);
 
   for (const minion of player.minions) {
     if (!minion.alive) continue;
 
-    // Minion move forward / backward (constrained by max distance to any entity)
+    // Minion move toward/away from nearest enemy
     const heroDef2 = getHero(player.hero.heroId);
     const mSpeed = heroDef2?.minion?.moveSpeed ?? 1;
-    const fwdPos = minion.position + forward * mSpeed;
-    const bwdPos = minion.position - forward * mSpeed;
+    const minionTowardEnemy = getTowardEnemyDirection(minion.position, oppHero, teamIndex);
+    const fwdPos = minion.position + minionTowardEnemy * mSpeed;
+    const bwdPos = minion.position - minionTowardEnemy * mSpeed;
     if (isMoveLegal(state, minion.minionId, fwdPos)) {
       actions.push({ type: 'move_forward', playerId: player.id, minionId: minion.minionId });
     }
