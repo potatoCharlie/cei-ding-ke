@@ -104,7 +104,7 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 
 ## Testing
 
-213 unit tests in `packages/shared` covering all game logic (zero server/client needed):
+248 tests in `packages/shared` covering all game logic (zero server/client needed):
 
 | Test file | Coverage area |
 |-----------|---------------|
@@ -120,6 +120,27 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 | `suspected-bugs.test.ts` | Magic immunity, minion stun-break, punch counter resets, stun interactions |
 | `available-actions.test.ts` | getAvailableActions for all action types and constraints |
 | `advanced-scenarios.test.ts` | Skill interactions, multi-turn combat, game over conditions, position mechanics |
+| `e2e/scripted-battles.test.ts` | 13 full-match scenarios loaded from `.txt` DSL files (see below) |
+| `e2e/invariant-fuzzer.test.ts` | 800+ random matches checking 11 game invariants across all hero combos |
+
+### E2E Battle Simulator
+
+The `e2e/` directory contains a battle simulation framework:
+
+- **`battle-simulator.ts`** — Drives full matches through the game engine. Supports scripted scenarios (`simulateBattle`) and random fuzzing (`simulateRandomMatch`).
+- **`script-parser.ts`** — Parses human-readable `.txt` scenario files into `BattleScript` objects.
+- **`scenarios/*.txt`** — Test scenarios in a custom text DSL. To add a new test, just add lines to a `.txt` file:
+  ```
+  === My new scenario
+  heroes: jin vs shan
+  pos: 5 5
+
+  turn 1: p1 wins
+    p1 skill small_dart p2
+    > p2: hp=95 stunned=true
+  ```
+  DSL reference: `heroes:`, `pos:`, `setup p1|p2: key=val`, `turn N: pX wins`, action lines (`punch`, `skill`, `move_forward`, `move_backward`, `summon`, `stay`), `minion` lines, `> pX: key=val` assertions, `> phase=X winner=X` assertions.
+- **`invariant-fuzzer.test.ts`** — Runs random matches and checks invariants (HP bounds, death consistency, distance limits, phase/winner consistency, etc.).
 
 ## Known Design Gaps
 
