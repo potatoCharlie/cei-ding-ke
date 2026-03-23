@@ -12,6 +12,12 @@ export function applyStatusEffect(
 ): void {
   const existing = hero.statusEffects.find(e => e.type === type);
   if (existing) {
+    // If already stunned and receiving another stun, wake up instead.
+    // This prevents infinite stun-lock (e.g., Small Dart stun on stunned target).
+    if (type === 'stunned') {
+      hero.statusEffects = hero.statusEffects.filter(e => e.type !== 'stunned');
+      return;
+    }
     existing.remainingRounds = Math.max(existing.remainingRounds, duration);
   } else {
     hero.statusEffects.push({

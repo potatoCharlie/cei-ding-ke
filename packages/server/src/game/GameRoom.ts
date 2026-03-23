@@ -123,9 +123,15 @@ export class GameRoom {
   private beginRPSPhase(): void {
     if (!this.state) return;
 
-    // Tick status effects first (decrements durations, applies Frozen DoT, etc.)
-    // This must happen BEFORE checking stun so that 1-round stuns expire properly.
-    // Otherwise skills like Small Dart can infinite stun-lock.
+    // Snapshot stun status BEFORE ticking so 1-round stuns cause the player
+    // to miss this RPS round. Ticking afterward removes the stun so they're
+    // free next turn. Infinite stun-lock from re-stunning is prevented in
+    // applyEffects (stun-break suppresses same-action re-stun).
+    const allPlayers = this.state.teams.flatMap(t => t.players).filter(p => p.hero.alive);
+    const stunnedPlayers = allPlayers.filter(p => isStunned(p.hero));
+    const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
+
+    // Now tick status effects (decrements durations, applies Frozen DoT, etc.)
     if (this.state.turn > 1) {
       const tickEffects = startTurn(this.state);
       if (tickEffects.length > 0) {
@@ -142,10 +148,9 @@ export class GameRoom {
       }
     }
 
-    // Check stun AFTER ticking so expired stuns don't cause auto-skip
-    const allPlayers = this.state.teams.flatMap(t => t.players).filter(p => p.hero.alive);
-    const stunnedPlayers = allPlayers.filter(p => isStunned(p.hero));
-    const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
+    // Clear stun immunity from previous turn, then mark currently stunned
+    // players as immune so they can't be re-stunned this same turn.
+    this.state.stunImmuneThisTurn = stunnedPlayers.map(p => p.id);
 
     if (stunnedPlayers.length > 0 && nonStunnedPlayers.length > 0) {
       // Auto-resolve: non-stunned player gets to act without RPS

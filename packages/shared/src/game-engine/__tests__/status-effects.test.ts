@@ -12,20 +12,22 @@ describe('applyStatusEffect', () => {
     expect(hero.statusEffects[0].remainingRounds).toBe(2);
   });
 
-  it('refreshes duration if already present (takes max)', () => {
+  it('stun on already-stunned hero wakes them up (prevents infinite stun-lock)', () => {
     const state = makeGame();
     const hero = getHero(state, 'p1');
     applyStatusEffect(hero, 'stunned', 1);
+    expect(hero.statusEffects.some(e => e.type === 'stunned')).toBe(true);
     applyStatusEffect(hero, 'stunned', 3);
-    expect(hero.statusEffects).toHaveLength(1);
-    expect(hero.statusEffects[0].remainingRounds).toBe(3);
+    // Second stun removes the first — hero wakes up
+    expect(hero.statusEffects.some(e => e.type === 'stunned')).toBe(false);
   });
 
-  it('does not downgrade duration', () => {
+  it('refreshes duration for non-stun effects (takes max)', () => {
     const state = makeGame();
     const hero = getHero(state, 'p1');
-    applyStatusEffect(hero, 'stunned', 3);
-    applyStatusEffect(hero, 'stunned', 1);
+    applyStatusEffect(hero, 'trapped', 1);
+    applyStatusEffect(hero, 'trapped', 3);
+    expect(hero.statusEffects).toHaveLength(1);
     expect(hero.statusEffects[0].remainingRounds).toBe(3);
   });
 });

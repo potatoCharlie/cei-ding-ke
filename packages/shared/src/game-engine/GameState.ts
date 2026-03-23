@@ -43,6 +43,7 @@ export function createGameState(
     awaitingMinionAction: false,
     history: [],
     winner: null,
+    stunImmuneThisTurn: [],
   };
 }
 
@@ -403,6 +404,8 @@ function applyMinionEffects(state: GameState, effects: GameEffect[]): void {
  */
 function applyEffects(state: GameState, effects: GameEffect[], breakStun = false): void {
   const sideEffects: GameEffect[] = [];
+  // Track targets whose stun was broken by damage in this batch.
+  const stunBrokenTargets = new Set<string>();
 
   for (const effect of effects) {
     const target = findPlayer(state, effect.targetId);
@@ -414,7 +417,10 @@ function applyEffects(state: GameState, effects: GameEffect[], breakStun = false
         target.hero.hp -= (effect.value ?? 0);
         if (breakStun) {
           const stunBreak = removeStunOnDamage(target.hero);
-          if (stunBreak) sideEffects.push(stunBreak);
+          if (stunBreak) {
+            sideEffects.push(stunBreak);
+            stunBrokenTargets.add(target.id);
+          }
         }
         break;
       }
@@ -424,6 +430,15 @@ function applyEffects(state: GameState, effects: GameEffect[], breakStun = false
       }
       case 'status_apply': {
         if (effect.statusEffect) {
+          // Don't re-apply stun if:
+          // 1. Stun was just broken by damage in this same action batch
+          // 2. Target was stunned at start of this turn (prevents re-stun after tick expiry)
+          if (effect.statusEffect === 'stunned' && (
+            stunBrokenTargets.has(target.id) ||
+            state.stunImmuneThisTurn.includes(target.id)
+          )) {
+            break;
+          }
           applyStatusEffect(target.hero, effect.statusEffect, effect.value ?? 1);
         }
         break;
@@ -514,6 +529,10 @@ function endTurn(state: GameState): void {
  * Start-of-turn processing: tick down status effects.
  */
 export function startTurn(state: GameState): GameEffect[] {
+  // Record who is stunned before ticking, so they can't be re-stunned this turn
+  const allPlayers = state.teams.flatMap(t => t.players).filter(p => p.hero.alive);
+  state.stunImmuneThisTurn = allPlayers.filter(p => isStunned(p.hero)).map(p => p.id);
+
   const tickEffects = tickStatusEffects(state);
   applyEffects(state, tickEffects);
 

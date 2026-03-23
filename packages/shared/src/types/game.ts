@@ -122,4 +122,6 @@ export interface GameState {
   history: TurnRecord[];
   /** Winner team index, null if game ongoing */
   winner: number | null;
+  /** Players immune to stun this turn (were stunned at turn start, prevents re-stun loop) */
+  stunImmuneThisTurn: string[];
 }
