@@ -1,0 +1,50 @@
+=== Stun-lock prevention: Jin Small Dart cannot infinite stun
+# Small Dart: 5 dmg + stun 1 round.
+# Turn 1: target not stunned → stun applies normally.
+# Turn 2: startTurn ticks stun off but marks stunImmuneThisTurn.
+#          Second Small Dart blocked by immunity → no stun.
+heroes: jin vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill small_dart p2
+  > p2: hp=95 stunned=true
+
+turn 2: p1 wins
+  p1 skill small_dart p2
+  > p2: hp=90 stunned=false
+
+turn 3: p2 wins
+  # p2 is NOT stunned, can act normally
+  p2 punch p1
+  > p1: hp=90
+
+=== Frozen DoT full cycle: trap + 10 dmg per round for 3 rounds
+# Shan Frozen: 10 magic damage + trapped 2 rounds.
+# Trapped DoT: 10 magic damage per startTurn tick.
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill frozen p2
+  > p2: hp=90 trapped=true
+
+turn 2: p1 wins
+  # startTurn: 10 DoT, trap 2→1
+  p1 stay
+  > p2: hp=80 trapped=true
+
+turn 3: p1 wins
+  # startTurn: 10 DoT, trap 1→0 (removed)
+  p1 stay
+  > p2: hp=70 trapped=false
+
+=== Stun-break on active damage: already-stunned hero wakes from punch
+# Pre-stun p2 with 2 rounds. p1 punches → damage breaks stun.
+heroes: shan vs nan
+pos: 5 5
+setup p2: stunned=2
+
+turn 1: p1 wins
+  p1 punch p2
+  > p2: hp=90 stunned=false

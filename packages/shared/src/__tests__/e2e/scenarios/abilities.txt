@@ -1,0 +1,66 @@
+=== Wind Walk approach: stealth + double speed movement
+# Start at distance 3. Jin uses Wind Walk, moves at double speed (2/turn).
+# Wind Walk lasts 3 rounds, then normal speed resumes.
+heroes: jin vs shan
+pos: 2 5
+
+turn 1: p1 wins
+  p1 skill wind_walk
+  > p1: invisible=true pos=2
+
+turn 2: p1 wins
+  # Invisible speed 2: pos 2→4
+  p1 move_forward
+  > p1: pos=4 invisible=true
+
+turn 3: p1 wins
+  # Invisible speed 2: pos 4→6 (distance 1 from enemy at 5, legal)
+  p1 move_forward
+  > p1: pos=6 invisible=true
+
+turn 4: p1 wins
+  # Wind Walk ended (3 rounds). Normal speed 1.
+  # From pos 6 toward enemy at 5: pos 5
+  p1 move_forward
+  > p1: pos=5 invisible=false
+
+=== Wind Walk exit punch at distance 0
+# Start at same position, use Wind Walk, stay, then exit punch.
+heroes: jin vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill wind_walk
+  > p1: invisible=true
+
+turn 2: p1 wins
+  p1 stay
+  > p1: invisible=true
+
+turn 3: p1 wins
+  # Exit punch from Wind Walk: 15 damage, reveals
+  p1 punch p2
+  > p1: invisible=false
+  > p2: hp=85
+
+=== Gao summon + minion action sequence
+# Gao summons Hellfire at same position, minion punches for 20 damage.
+heroes: gao vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 summon
+  minion hellfire_p1 punch p2
+  > p2: hp=80
+
+=== Nan stink aura deals 10 magic at turn end
+# Both at distance 0. Nan's passive deals 10 magic damage at endTurn.
+# Requires both at same position at BOTH start and end of turn.
+heroes: nan vs shan
+pos: 5 5
+setup p1: posStart=5
+setup p2: posStart=5
+
+turn 1: p1 wins
+  p1 stay
+  > p2: hp=90
