@@ -4,7 +4,7 @@ import type {
 } from '../types/game.js';
 import type { HeroDefinition } from '../types/hero.js';
 import { PUNCH_STUN_THRESHOLD, TEAM_0_START, TEAM_1_START } from '../constants.js';
-import { resolveRPS1v1, randomRPSChoice } from './rps.js';
+import { resolveRPS1v1, resolveRPSMulti, randomRPSChoice } from './rps.js';
 import { moveForward, moveBackward } from './movement.js';
 import { executePunch, executeSkill, executeWindWalkPunch } from './combat.js';
 import { applyStatusEffect, tickStatusEffects, applyPassiveEffects, isStunned } from './status-effects.js';
@@ -168,51 +168,60 @@ export function resolveRPSRound(state: GameState): RPSResult {
   const allPlayers = getAllAlivePlayers(state);
   const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
 
+  // Auto-fill missing choices with random
   for (const player of nonStunnedPlayers) {
     if (state.pendingRPS[player.id] == null) {
       state.pendingRPS[player.id] = randomRPSChoice();
     }
   }
 
-  if (state.mode === '1v1' && nonStunnedPlayers.length === 2) {
-    const p1 = nonStunnedPlayers[0];
-    const p2 = nonStunnedPlayers[1];
-    const result = resolveRPS1v1(
-      p1.id, state.pendingRPS[p1.id]!,
-      p2.id, state.pendingRPS[p2.id]!,
-    );
-
-    state.phase = result.draw ? 'rps_submit' : 'action_phase';
-    if (!result.draw) {
-      state.actionOrder = result.winners;
-      state.currentActionIndex = 0;
-    }
-
-    state.pendingRPS = {};
-    return result;
-  }
-
-  if (state.mode === '1v1' && nonStunnedPlayers.length === 1) {
-    const winner = nonStunnedPlayers[0];
-    const loser = allPlayers.find(p => p.id !== winner.id)!;
+  // Only one non-stunned player: they win automatically
+  if (nonStunnedPlayers.length <= 1) {
+    const winners = nonStunnedPlayers.map(p => p.id);
+    const losers = allPlayers.filter(p => !winners.includes(p.id)).map(p => p.id);
 
     const result: RPSResult = {
-      choices: { [winner.id]: 'rock' },
-      winners: [winner.id],
-      losers: [loser.id],
+      choices: { ...state.pendingRPS } as Record<string, RPSChoice>,
+      winners,
+      losers,
       draw: false,
     };
 
     state.phase = 'action_phase';
-    state.actionOrder = [winner.id];
+    state.actionOrder = winners;
     state.currentActionIndex = 0;
     state.pendingRPS = {};
-
     return result;
   }
 
+  // Build choices map for non-stunned players
+  const choices: Record<string, RPSChoice> = {};
+  for (const p of nonStunnedPlayers) {
+    choices[p.id] = state.pendingRPS[p.id]!;
+  }
+
+  const multiResult = resolveRPSMulti(choices);
+
+  const allChoices = { ...state.pendingRPS } as Record<string, RPSChoice>;
   state.pendingRPS = {};
-  return { choices: {}, winners: [], losers: [], draw: true };
+
+  if (!multiResult) {
+    // Tie
+    return { choices: allChoices, winners: [], losers: [], draw: true };
+  }
+
+  const stunnedIds = allPlayers.filter(p => isStunned(p.hero)).map(p => p.id);
+
+  state.phase = 'action_phase';
+  state.actionOrder = multiResult.winners;
+  state.currentActionIndex = 0;
+
+  return {
+    choices: allChoices,
+    winners: multiResult.winners,
+    losers: [...multiResult.losers, ...stunnedIds],
+    draw: false,
+  };
 }
 
 /**
