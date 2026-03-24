@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createGameState, submitRPS, resolveRPSRound } from '../game-engine/GameState.js';
+import { createGameState, submitRPS, resolveRPSRound, executeAction } from '../game-engine/GameState.js';
 import { TEAM_0_START, TEAM_1_START } from '../constants.js';
 
 describe('2v2 game creation', () => {
@@ -112,5 +112,69 @@ describe('2v2 RPS resolution', () => {
     const result = resolveRPSRound(state);
     expect(result.winners).toEqual(['p1']);
     expect(state.actionOrder).toEqual(['p1']);
+  });
+});
+
+describe('2v2 sequential action execution', () => {
+  function make2v2AtSamePos() {
+    const state = createGameState('test', '2v2', [
+      { id: 'p1', name: 'P1', heroId: 'jin', teamIndex: 0 },
+      { id: 'p2', name: 'P2', heroId: 'shan', teamIndex: 0 },
+      { id: 'p3', name: 'P3', heroId: 'nan', teamIndex: 1 },
+      { id: 'p4', name: 'P4', heroId: 'gao', teamIndex: 1 },
+    ]);
+    for (const t of state.teams) for (const p of t.players) p.hero.position = 5;
+    return state;
+  }
+
+  it('two winners act sequentially', () => {
+    const state = make2v2AtSamePos();
+    state.phase = 'action_phase';
+    state.actionOrder = ['p1', 'p2'];
+    state.currentActionIndex = 0;
+
+    // p1 acts
+    executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p3' });
+    expect(state.currentActionIndex).toBe(1);
+    expect(state.teams[1].players[0].hero.hp).toBe(90);
+
+    // p2 acts
+    executeAction(state, { type: 'punch', playerId: 'p2', targetId: 'p4' });
+    expect(state.teams[1].players[1].hero.hp).toBe(90);
+  });
+
+  it('dead hero skipped in action order', () => {
+    const state = make2v2AtSamePos();
+    state.teams[1].players[0].hero.hp = 1; // p3 at 1 HP
+    state.phase = 'action_phase';
+    state.actionOrder = ['p1', 'p3'];
+    state.currentActionIndex = 0;
+
+    // p1 kills p3
+    executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p3' });
+    expect(state.teams[1].players[0].hero.alive).toBe(false);
+
+    // p3's turn is skipped (dead). Game should NOT be over (p4 still alive).
+    expect(state.winner).toBeNull();
+  });
+
+  it('team fully eliminated mid-round → game over', () => {
+    const state = make2v2AtSamePos();
+    state.teams[1].players[0].hero.hp = 1; // p3 at 1 HP
+    state.teams[1].players[1].hero.hp = 1; // p4 at 1 HP
+    state.phase = 'action_phase';
+    state.actionOrder = ['p1', 'p2'];
+    state.currentActionIndex = 0;
+
+    // p1 kills p3
+    executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p3' });
+    expect(state.teams[1].players[0].hero.alive).toBe(false);
+    expect(state.winner).toBeNull(); // p4 still alive
+
+    // p2 kills p4 → game over
+    executeAction(state, { type: 'punch', playerId: 'p2', targetId: 'p4' });
+    expect(state.teams[1].players[1].hero.alive).toBe(false);
+    expect(state.winner).toBe(0); // team 0 wins
+    expect(state.phase).toBe('game_over');
   });
 });
