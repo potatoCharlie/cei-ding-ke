@@ -744,6 +744,16 @@ export function getAvailableActions(state: GameState, playerId: string): PlayerA
             actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: opp.id });
           }
         }
+        // Kuang can also target teammates
+        const teammates = state.teams
+          .find(t => t.players.some(p => p.id === playerId))
+          ?.players.filter(p => p.id !== playerId && p.hero.alive) ?? [];
+        for (const mate of teammates) {
+          const d = getDistance(hero.position, mate.hero.position);
+          if (d >= skill.minDistance && d <= skill.maxDistance) {
+            actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: mate.id });
+          }
+        }
       } else {
         for (const opp of opponents) {
           const d = getDistance(hero.position, opp.hero.position);
