@@ -47,6 +47,7 @@ export default function App() {
   const [timerStart, setTimerStart] = useState(0);
 
   const animManagerRef = useRef<AnimationManager | null>(null);
+  const gameStateRef = useRef<GameState | null>(null);
 
   // Initialize animation manager
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function App() {
 
   useEffect(() => {
     socket.on('game:state', (state: GameState) => {
+      gameStateRef.current = state;
       setGameState(state);
       setScreen('battle');
     });
@@ -93,11 +95,11 @@ export default function App() {
       }
     });
 
-    socket.on('rps:waiting', (data) => {
-      addLog(`Waiting for RPS... (${data.submitted.length}/2 submitted)`);
+    socket.on('rps:waiting', (data: { submitted: string[]; total: number }) => {
+      addLog(`Waiting for RPS... (${data.submitted.length}/${data.total} submitted)`);
     });
 
-    socket.on('action:request', (data) => {
+    socket.on('action:request', (data: { playerId: string; timeLimit: number }) => {
       if (data.playerId === socket.id) {
         setIsMyTurn(true);
         setTimerTotal(ACTION_TIMER);
@@ -105,7 +107,10 @@ export default function App() {
         addLog('Your turn to act!');
       } else {
         setIsMyTurn(false);
-        addLog('Opponent is choosing their action...');
+        const playerName = gameStateRef.current
+          ? (gameStateRef.current.teams.flatMap(t => t.players).find(p => p.id === data.playerId)?.name ?? 'Opponent')
+          : 'Opponent';
+        addLog(`${playerName} is choosing their action...`);
       }
     });
 
@@ -488,11 +493,17 @@ export default function App() {
         />
       )}
 
-      {phase === 'action_phase' && !isMyTurn && (
-        <div className="waiting-banner">
-          Waiting for opponent's action...
-        </div>
-      )}
+      {phase === 'action_phase' && !isMyTurn && gameState && (() => {
+        const actorId = gameState.actionOrder[gameState.currentActionIndex];
+        const actorName = actorId
+          ? (gameState.teams.flatMap(t => t.players).find(p => p.id === actorId)?.name ?? 'Opponent')
+          : 'Opponent';
+        return (
+          <div className="waiting-banner">
+            Waiting for {actorName}'s action...
+          </div>
+        );
+      })()}
 
       <GameLog logs={logs} />
 
@@ -505,11 +516,18 @@ const RPS_EMOJI: Record<string, string> = { rock: '✊', paper: '✋', scissors:
 
 function RPSDrawBanner({ choices, myId }: { choices: Record<string, RPSChoice>; myId: string }) {
   const myChoice = choices[myId];
-  const oppChoice = Object.entries(choices).find(([id]) => id !== myId)?.[1];
+  const otherChoices = Object.entries(choices)
+    .filter(([id]) => id !== myId)
+    .map(([, choice]) => choice);
+
   return (
     <div className="rps-draw-banner">
       <div className="rps-draw-emojis">
-        {myChoice && RPS_EMOJI[myChoice]} vs {oppChoice && RPS_EMOJI[oppChoice]}
+        {myChoice && RPS_EMOJI[myChoice]}
+        {otherChoices.length > 0 && ' vs '}
+        {otherChoices.map((c, i) => (
+          <span key={i}>{RPS_EMOJI[c]}</span>
+        ))}
       </div>
       <div className="rps-draw-text">Draw! Pick again</div>
     </div>
