@@ -28,6 +28,16 @@ export default function App() {
   const [error, setError] = useState('');
   const [gameOverWinner, setGameOverWinner] = useState<number | null>(null);
 
+  // Lobby state
+  const [lobbyPlayers, setLobbyPlayers] = useState<Array<{
+    id: string;
+    name: string;
+    heroId: string;
+    teamIndex: number;
+    ready: boolean;
+  }>>([]);
+  const [lobbyMode, setLobbyMode] = useState<'1v1' | '2v2'>('1v1');
+
   // Animation state
   const [activeAnimations, setActiveAnimations] = useState<BattleAnimation[]>([]);
   const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
@@ -137,6 +147,11 @@ export default function App() {
       addLog(`Player ${data.playerId} left`);
     });
 
+    socket.on('lobby:update', (data: { mode: '1v1' | '2v2'; players: Array<{ id: string; name: string; heroId: string; teamIndex: number; ready: boolean }> }) => {
+      setLobbyPlayers(data.players);
+      setLobbyMode(data.mode);
+    });
+
     socket.on('error', (data) => {
       setError(data.message);
       addLog(`Error: ${data.message}`);
@@ -154,6 +169,7 @@ export default function App() {
       socket.off('game:end');
       socket.off('player:joined');
       socket.off('player:left');
+      socket.off('lobby:update');
       socket.off('error');
     };
   }, [addLog]);
@@ -323,19 +339,71 @@ export default function App() {
 
   // ─── LOBBY ───
   if (screen === 'lobby') {
+    const maxSlots = lobbyMode === '2v2' ? 4 : 2;
+    const team0 = lobbyPlayers.filter(p => p.teamIndex === 0);
+    const team1 = lobbyPlayers.filter(p => p.teamIndex === 1);
+
     return (
       <div className="app-container">
         <div className="lobby-screen">
-          <div className="lobby-icon">
-            <div className="lobby-spinner" />
-          </div>
-          <h2 className="screen-title">Awaiting Challenger</h2>
+          <h2 className="screen-title">Waiting for Players</h2>
           <div className="room-display">
             <span className="room-label">Room Code</span>
             <span className="room-code">{roomId}</span>
           </div>
-          <p className="lobby-hint">Share this code with your opponent</p>
-          <p className="lobby-hero">Playing as <strong>{selectedHero}</strong></p>
+          <p className="lobby-hint">Share this code with {maxSlots === 4 ? 'your teammates and opponents' : 'your opponent'}</p>
+
+          <div className="lobby-teams">
+            <div className="lobby-team team-blue">
+              <div className="lobby-team-label">Team Blue</div>
+              {Array.from({ length: maxSlots / 2 }).map((_, i) => {
+                const p = team0[i];
+                return (
+                  <div key={i} className={`lobby-slot ${p ? 'filled' : 'empty'}`}>
+                    {p ? (
+                      <>
+                        <span className="lobby-slot-name">{p.name}</span>
+                        {p.heroId
+                          ? <span className="lobby-slot-hero">{p.heroId}</span>
+                          : <span className="lobby-slot-picking">picking...</span>
+                        }
+                      </>
+                    ) : (
+                      <span className="lobby-slot-empty">Waiting...</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="lobby-vs">VS</div>
+
+            <div className="lobby-team team-red">
+              <div className="lobby-team-label">Team Red</div>
+              {Array.from({ length: maxSlots / 2 }).map((_, i) => {
+                const p = team1[i];
+                return (
+                  <div key={i} className={`lobby-slot ${p ? 'filled' : 'empty'}`}>
+                    {p ? (
+                      <>
+                        <span className="lobby-slot-name">{p.name}</span>
+                        {p.heroId
+                          ? <span className="lobby-slot-hero">{p.heroId}</span>
+                          : <span className="lobby-slot-picking">picking...</span>
+                        }
+                      </>
+                    ) : (
+                      <span className="lobby-slot-empty">Waiting...</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="lobby-progress">
+            {lobbyPlayers.filter(p => p.ready).length} / {maxSlots} ready
+          </div>
         </div>
         <GameLog logs={logs} />
         <style>{menuStyles}</style>
@@ -941,5 +1009,99 @@ const menuStyles = `
     border-color: var(--gold);
     background: linear-gradient(180deg, #f59e0b15, #f59e0b05);
     color: var(--gold);
+  }
+
+  /* ─── Lobby Teams ─── */
+  .lobby-teams {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .lobby-team {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .lobby-team-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+  }
+
+  .team-blue .lobby-team-label {
+    color: var(--team-blue);
+    background: #3b82f610;
+    border: 1px solid #3b82f630;
+  }
+
+  .team-red .lobby-team-label {
+    color: var(--team-red-light);
+    background: #ef444410;
+    border: 1px solid #ef444430;
+  }
+
+  .lobby-slot {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-dim);
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 52px;
+    justify-content: center;
+  }
+
+  .lobby-slot.filled {
+    border-color: var(--border-base);
+  }
+
+  .lobby-slot-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .lobby-slot-hero {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--gold-light);
+    letter-spacing: 0.5px;
+  }
+
+  .lobby-slot-picking {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  .lobby-slot-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+    text-align: center;
+  }
+
+  .lobby-vs {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--text-dim);
+    align-self: center;
+    padding-top: 28px;
+  }
+
+  .lobby-progress {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
   }
 `;
