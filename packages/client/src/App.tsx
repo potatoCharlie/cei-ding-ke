@@ -18,6 +18,7 @@ export default function App() {
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [joinRoomId, setJoinRoomId] = useState('');
+  const [mode, setMode] = useState<'1v1' | '2v2'>('1v1');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [rpsResult, setRpsResult] = useState<{ choices: Record<string, RPSChoice>; winners: string[]; losers: string[]; draw: boolean } | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
@@ -161,10 +162,10 @@ export default function App() {
     if (!playerName.trim()) { setError('Enter your name'); return; }
     try {
       await connectSocket();
-      socket.emit('room:create', { name: playerName }, (res: { roomId: string }) => {
+      socket.emit('room:create', { name: playerName, mode }, (res: { roomId: string; mode: '1v1' | '2v2' }) => {
         setRoomId(res.roomId);
         setScreen('hero_select');
-        addLog(`Room created: ${res.roomId}`);
+        addLog(`Room created: ${res.roomId} (${mode})`);
       });
     } catch {
       setError('Failed to connect to server');
@@ -190,7 +191,7 @@ export default function App() {
     if (!playerName.trim() || !selectedHero) { setError('Enter name and select a hero'); return; }
     try {
       await connectSocket();
-      socket.emit('room:quickmatch', { name: playerName, heroId: selectedHero }, (res: { roomId: string }) => {
+      socket.emit('room:quickmatch', { name: playerName, heroId: selectedHero, mode }, (res: { roomId: string }) => {
         setRoomId(res.roomId);
         setScreen('battle');
         addLog(`Quick match! Room: ${res.roomId}`);
@@ -238,8 +239,22 @@ export default function App() {
               onChange={e => setPlayerName(e.target.value)}
             />
 
+            <div className="mode-toggle">
+              <button
+                className={`mode-btn ${mode === '1v1' ? 'active' : ''}`}
+                onClick={() => setMode('1v1')}
+              >
+                1v1
+              </button>
+              <button
+                className={`mode-btn ${mode === '2v2' ? 'active' : ''}`}
+                onClick={() => setMode('2v2')}
+              >
+                2v2
+              </button>
+            </div>
             <button className="game-btn game-btn-primary" onClick={handleCreateRoom}>
-              Create Room
+              Create Room ({mode})
             </button>
 
             <div className="divider">
@@ -280,7 +295,7 @@ export default function App() {
               onClick={handleQuickMatch}
               disabled={!selectedHero || !playerName}
             >
-              Find Match
+              Find Match ({mode})
             </button>
           </div>
 
@@ -896,5 +911,35 @@ const menuStyles = `
     color: var(--text-dim);
     font-style: italic;
     font-size: 14px;
+  }
+
+  /* ─── Mode Toggle ─── */
+  .mode-toggle {
+    display: flex;
+    gap: 8px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid var(--border-dim);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-size: 13px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mode-btn:hover {
+    border-color: var(--border-bright);
+  }
+
+  .mode-btn.active {
+    border-color: var(--gold);
+    background: linear-gradient(180deg, #f59e0b15, #f59e0b05);
+    color: var(--gold);
   }
 `;
