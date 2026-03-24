@@ -572,7 +572,7 @@ function executeSummon(state: GameState, playerId: string): GameEffect[] {
 /**
  * End the current turn.
  */
-function endTurn(state: GameState): void {
+export function endTurn(state: GameState): void {
   const passiveEffects = applyPassiveEffects(state);
   applyEffects(state, passiveEffects);
 

@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Server, Socket } from 'socket.io';
 import {
-  createGameState, submitRPS, resolveRPSRound, executeAction, getAvailableActions, startTurn,
+  createGameState, submitRPS, resolveRPSRound, executeAction, getAvailableActions, startTurn, endTurn,
   isStunned,
   RPS_TIMER, ACTION_TIMER,
   type GameState, type RPSChoice, type PlayerAction, type RPSResult, type GameEffect,
@@ -170,12 +170,14 @@ export class GameRoom {
     this.state.stunImmuneThisTurn = stunnedPlayers.map(p => p.id);
 
     if (stunnedPlayers.length > 0 && nonStunnedPlayers.length === 0) {
-      // All alive players are stunned — skip action phase, start next RPS
-      this.io.to(this.id).emit('game:phase', {
-        phase: 'rps_submit',
-        turn: this.state.turn,
-      });
-      this.startRPSTimer();
+      // All alive players are stunned — apply end-of-turn passives, then start next turn
+      endTurn(this.state);
+      this.io.to(this.id).emit('game:state', this.state);
+      if ((this.state.phase as string) === 'game_over') {
+        this.io.to(this.id).emit('game:end', { winnerTeam: this.state.winner!, stats: {} });
+        return;
+      }
+      this.beginRPSPhase();
       return;
     }
 
@@ -352,8 +354,12 @@ export class GameRoom {
     this.rpsTimer = setTimeout(() => {
       if (!this.state || this.state.phase !== 'rps_submit') return;
 
-      // Auto-submit for players who haven't submitted
-      for (const player of this.players.values()) {
+      // Only auto-submit for alive non-stunned players
+      const alivePlayers = this.state.teams
+        .flatMap(t => t.players)
+        .filter(p => p.hero.alive && !isStunned(p.hero));
+
+      for (const player of alivePlayers) {
         if (this.state.pendingRPS[player.id] == null) {
           submitRPS(this.state, player.id, ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)] as RPSChoice);
         }

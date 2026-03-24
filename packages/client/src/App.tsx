@@ -197,8 +197,9 @@ export default function App() {
     if (!playerName.trim() || !joinRoomId.trim()) { setError('Enter name and room ID'); return; }
     try {
       await connectSocket();
-      socket.emit('room:join', { roomId: joinRoomId, name: playerName }, (res: { roomId?: string; error?: string }) => {
+      socket.emit('room:join', { roomId: joinRoomId, name: playerName }, (res: { roomId?: string; error?: string; mode?: '1v1' | '2v2' }) => {
         if (res.error) { setError(res.error); return; }
+        if (res.mode) setLobbyMode(res.mode);
         setRoomId(res.roomId!);
         setScreen('hero_select');
         addLog(`Joined room: ${res.roomId}`);

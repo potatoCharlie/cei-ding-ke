@@ -7,7 +7,7 @@ export type * from './types/protocol.js';
 export * from './constants.js';
 
 // Game Engine
-export { createGameState, submitRPS, resolveRPSRound, executeAction, getAvailableActions, startTurn } from './game-engine/GameState.js';
+export { createGameState, submitRPS, resolveRPSRound, executeAction, getAvailableActions, startTurn, endTurn } from './game-engine/GameState.js';
 export { resolveRPS1v1, resolveRPSMulti, compareRPS, randomRPSChoice } from './game-engine/rps.js';
 export { moveForward, moveBackward } from './game-engine/movement.js';
 export { executePunch, executeSkill } from './game-engine/combat.js';
