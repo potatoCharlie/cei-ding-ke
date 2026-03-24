@@ -115,7 +115,7 @@ describe('Suspected bugs — Minion stun-break behavior', () => {
 });
 
 describe('Suspected bugs — consecutivePunchesReceived reset', () => {
-  it('counter resets when attacker does a non-punch action', () => {
+  it('counter does NOT reset when attacker does a non-punch action (target-based)', () => {
     const state = makeGame('shan', 'nan');
     setPositions(state, 5, 5);
 
@@ -126,13 +126,18 @@ describe('Suspected bugs — consecutivePunchesReceived reset', () => {
     }
     expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
 
-    // Now p1 does "stay" → should reset the counter
+    // Attacker does "stay" → does NOT reset target's counter (target-based tracking)
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'stay', playerId: 'p1' });
+    expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
+
+    // Target acts → resets their own counter
+    winRPSForPlayer(state, 'p2');
+    executeAction(state, { type: 'stay', playerId: 'p2' });
     expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(0);
   });
 
-  it('counter resets when attacker uses a skill instead of punching', () => {
+  it('counter does NOT reset when attacker uses a skill (target-based)', () => {
     const state = makeGame('shan', 'nan');
     setPositions(state, 5, 5);
 
@@ -143,13 +148,13 @@ describe('Suspected bugs — consecutivePunchesReceived reset', () => {
     }
     expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
 
-    // Use Big Darts instead of punch → should reset
+    // Attacker uses skill → does NOT reset target's counter (target-based tracking)
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'big_darts', targetId: 'p2' });
-    expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(0);
+    expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
   });
 
-  it('counter resets when attacker moves instead of punching', () => {
+  it('counter does NOT reset when attacker moves (target-based)', () => {
     const state = makeGame('shan', 'nan');
     setPositions(state, 5, 5);
 
@@ -160,10 +165,10 @@ describe('Suspected bugs — consecutivePunchesReceived reset', () => {
     }
     expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
 
-    // Move instead → should reset
+    // Attacker moves → does NOT reset target's counter (target-based tracking)
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'move_backward', playerId: 'p1' });
-    expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(0);
+    expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
   });
 
   it('counter persists across turns if attacker keeps punching', () => {

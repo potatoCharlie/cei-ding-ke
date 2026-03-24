@@ -257,12 +257,9 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
     return effects;
   }
 
-  // If hero does anything other than punch, reset opponents' consecutive punch counters
-  if (!action.minionId && action.type !== 'punch') {
-    const opponents = state.teams.flatMap(t => t.players).filter(p => p.id !== action.playerId);
-    for (const opp of opponents) {
-      opp.hero.consecutivePunchesReceived = 0;
-    }
+  // Acting hero resets their own received punch counter
+  if (!action.minionId) {
+    player.hero.consecutivePunchesReceived = 0;
   }
 
   // ─── Hero action ───
