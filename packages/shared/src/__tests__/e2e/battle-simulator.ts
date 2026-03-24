@@ -476,3 +476,126 @@ export function simulateRandomMatch(
 
   return { state, log, violations: allViolations };
 }
+
+/**
+ * Simulate a random 2v2 match. Returns { state, log, violations }.
+ */
+export function simulateRandomMatch2v2(
+  team0Heroes: string[],
+  team1Heroes: string[],
+  maxTurns: number,
+): { state: GameState; log: BattleLog; violations: string[] } {
+  const state = createGameState('fuzz-test', '2v2', [
+    { id: 'p1', name: 'Player1', heroId: team0Heroes[0], teamIndex: 0 },
+    { id: 'p2', name: 'Player2', heroId: team0Heroes[1], teamIndex: 0 },
+    { id: 'p3', name: 'Player3', heroId: team1Heroes[0], teamIndex: 1 },
+    { id: 'p4', name: 'Player4', heroId: team1Heroes[1], teamIndex: 1 },
+  ]);
+
+  const log: BattleLog = [];
+  const allViolations: string[] = [];
+  const playerIds = ['p1', 'p2', 'p3', 'p4'];
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    if (state.phase === 'game_over') break;
+
+    // Tick status effects
+    let startTurnEffects: GameEffect[] = [];
+    if (state.turn > 1) {
+      startTurnEffects = startTurn(state);
+      if ((state.phase as string) === 'game_over') {
+        log.push({
+          turn: turn + 1,
+          rpsWinners: ['n/a'],
+          actions: [{ type: 'stay', playerId: 'n/a' }],
+          heroEffects: [],
+          minionEffects: [],
+          startTurnEffects,
+          stateAfter: snapshotState(state),
+        });
+        break;
+      }
+    }
+
+    // Randomly pick 1-2 winners from alive, non-stunned players
+    const eligible = playerIds.filter(id => {
+      const hero = getHeroState(state, id);
+      return hero.alive && !isStunned(hero);
+    });
+
+    if (eligible.length === 0) {
+      // All alive players are stunned — just advance turn with no actions
+      winRPS(state, [playerIds.find(id => getHeroState(state, id).alive) ?? 'p1']);
+      const stayAction: PlayerAction = { type: 'stay', playerId: state.actionOrder[0] };
+      executeAction(state, stayAction);
+      log.push({
+        turn: turn + 1,
+        rpsWinners: state.actionOrder,
+        actions: [stayAction],
+        heroEffects: [],
+        minionEffects: [],
+        startTurnEffects,
+        stateAfter: snapshotState(state),
+      });
+      continue;
+    }
+
+    // Randomly pick 1 or 2 winners from eligible players (from different teams preferably)
+    const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+    const numWinners = Math.random() < 0.5 ? 1 : Math.min(2, shuffled.length);
+    const winners = shuffled.slice(0, numWinners);
+
+    winRPS(state, winners);
+
+    // Execute actions for each winner
+    const allHeroEffects: GameEffect[] = [];
+    const allActions: PlayerAction[] = [];
+    let minionAction: PlayerAction | undefined;
+    let minionEffects: GameEffect[] = [];
+
+    for (const winnerId of winners) {
+      if ((state.phase as string) === 'game_over') break;
+
+      // Skip if this winner died during this round
+      const hero = getHeroState(state, winnerId);
+      if (!hero.alive) continue;
+
+      const heroAction = pickRandomAction(state, winnerId);
+      if (!heroAction) {
+        const stayAction: PlayerAction = { type: 'stay', playerId: winnerId };
+        executeAction(state, stayAction);
+        allActions.push(stayAction);
+        continue;
+      }
+
+      const effects = executeAction(state, heroAction);
+      allHeroEffects.push(...effects);
+      allActions.push(heroAction);
+
+      // Handle minion action if needed
+      if (state.awaitingMinionAction) {
+        minionAction = pickRandomAction(state, winnerId) ?? { type: 'stay', playerId: winnerId };
+        minionEffects = executeAction(state, minionAction);
+      }
+    }
+
+    log.push({
+      turn: turn + 1,
+      rpsWinners: winners,
+      actions: allActions,
+      minionAction,
+      heroEffects: allHeroEffects,
+      minionEffects,
+      startTurnEffects,
+      stateAfter: snapshotState(state),
+    });
+
+    // Check invariants
+    const violations = checkInvariants(state);
+    if (violations.length > 0) {
+      allViolations.push(...violations.map(v => `Turn ${turn + 1}: ${v}`));
+    }
+  }
+
+  return { state, log, violations: allViolations };
+}

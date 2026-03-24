@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { simulateRandomMatch, formatLog, checkInvariants } from './battle-simulator.js';
+import { simulateRandomMatch, simulateRandomMatch2v2, formatLog, checkInvariants } from './battle-simulator.js';
 
 const HEROES = ['nan', 'shan', 'gao', 'jin'];
 const MATCHES_PER_COMBO = 50;
@@ -41,6 +41,46 @@ describe('Invariant Fuzzer', () => {
     }
   }
 
+});
+
+describe('2v2 Invariant Fuzzer', () => {
+  // All ways to split 4 heroes into 2 teams of 2
+  const teamSplits: [string[], string[]][] = [
+    [['nan', 'shan'], ['gao', 'jin']],
+    [['nan', 'gao'], ['shan', 'jin']],
+    [['nan', 'jin'], ['shan', 'gao']],
+  ];
+
+  for (const [team0, team1] of teamSplits) {
+    const label = `${team0.join('+')} vs ${team1.join('+')}`;
+    it(`${label}: 20 random matches with no invariant violations`, () => {
+      for (let i = 0; i < 20; i++) {
+        const { state, log, violations } = simulateRandomMatch2v2(team0, team1, 50);
+        if (violations.length > 0) {
+          throw new Error(
+            `Invariant violations in ${label} match #${i + 1}:\n` +
+            violations.join('\n') +
+            `\n\nFull battle log:\n${formatLog(log)}`
+          );
+        }
+
+        // Check final state invariants too
+        if (state.phase !== 'game_over') {
+          const finalViolations = checkInvariants(state);
+          if (finalViolations.length > 0) {
+            throw new Error(
+              `Final state invariant violations in ${label} match #${i + 1}:\n` +
+              finalViolations.join('\n') +
+              `\n\nFull battle log:\n${formatLog(log)}`
+            );
+          }
+        }
+      }
+    });
+  }
+});
+
+describe('Termination Tests', () => {
   it('all hero combinations terminate within reasonable turns', () => {
     let totalGames = 0;
     let gamesOver = 0;
