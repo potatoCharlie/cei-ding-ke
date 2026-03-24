@@ -11,30 +11,97 @@ import { applyStatusEffect, tickStatusEffects, applyPassiveEffects, isStunned } 
 import { getHero } from '../heroes/registry.js';
 import { getDistance, getForwardDirection, getTeamIndex, isMoveLegal, findOpponentHero } from './position.js';
 
+type PlayerInput = { id: string; name: string; heroId: string };
+type PlayerInputMulti = { id: string; name: string; heroId: string; teamIndex: number };
+type GameMode = '1v1' | '2v2' | '3v3';
+
 /**
- * Create a new game state for a 1v1 match.
+ * Create a new game state.
+ *
+ * Old 1v1 signature (backward-compatible):
+ *   createGameState(gameId, player1, player2)
+ *
+ * New multi-player signature:
+ *   createGameState(gameId, mode, players)
  */
 export function createGameState(
   gameId: string,
-  player1: { id: string; name: string; heroId: string },
-  player2: { id: string; name: string; heroId: string },
+  player1: PlayerInput,
+  player2: PlayerInput,
+): GameState;
+export function createGameState(
+  gameId: string,
+  mode: GameMode,
+  players: PlayerInputMulti[],
+): GameState;
+export function createGameState(
+  gameId: string,
+  player1OrMode: PlayerInput | GameMode,
+  player2OrPlayers: PlayerInput | PlayerInputMulti[],
 ): GameState {
-  const p1State = createPlayerState(player1.id, player1.name, player1.heroId, TEAM_0_START);
-  const p2State = createPlayerState(player2.id, player2.name, player2.heroId, TEAM_1_START);
+  // Detect which overload was called
+  if (typeof player1OrMode === 'string') {
+    // New signature: createGameState(gameId, mode, players)
+    const mode = player1OrMode;
+    const players = player2OrPlayers as PlayerInputMulti[];
+    return createGameStateMulti(gameId, mode, players);
+  } else {
+    // Old signature: createGameState(gameId, player1, player2)
+    const player1 = player1OrMode;
+    const player2 = player2OrPlayers as PlayerInput;
+    return createGameStateMulti(gameId, '1v1', [
+      { ...player1, teamIndex: 0 },
+      { ...player2, teamIndex: 1 },
+    ]);
+  }
+}
 
-  const positionsAtTurnStart: Record<string, number> = {
-    [player1.id]: TEAM_0_START,
-    [player2.id]: TEAM_1_START,
+function createGameStateMulti(
+  gameId: string,
+  mode: GameMode,
+  players: PlayerInputMulti[],
+): GameState {
+  // Reject 3v3 for now
+  if (mode === '3v3') {
+    throw new Error('3v3 mode is not available yet (requires 6+ heroes)');
+  }
+
+  // Validate unique heroes (only enforced for multi-player modes, not 1v1)
+  if (mode !== '1v1') {
+    const heroIds = players.map(p => p.heroId);
+    if (new Set(heroIds).size !== heroIds.length) {
+      throw new Error('Duplicate hero IDs not allowed');
+    }
+  }
+
+  const startPositions: Record<number, number> = {
+    0: TEAM_0_START,
+    1: TEAM_1_START,
   };
+
+  const positionsAtTurnStart: Record<string, number> = {};
+  const team0Players: PlayerState[] = [];
+  const team1Players: PlayerState[] = [];
+
+  for (const p of players) {
+    const startPos = startPositions[p.teamIndex];
+    const playerState = createPlayerState(p.id, p.name, p.heroId, startPos);
+    positionsAtTurnStart[p.id] = startPos;
+    if (p.teamIndex === 0) {
+      team0Players.push(playerState);
+    } else {
+      team1Players.push(playerState);
+    }
+  }
 
   return {
     id: gameId,
-    mode: '1v1',
+    mode,
     phase: 'rps_submit',
     turn: 1,
     teams: [
-      { teamIndex: 0, players: [p1State] },
-      { teamIndex: 1, players: [p2State] },
+      { teamIndex: 0, players: team0Players },
+      { teamIndex: 1, players: team1Players },
     ],
     positionsAtTurnStart,
     pendingRPS: {},
