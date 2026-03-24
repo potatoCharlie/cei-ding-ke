@@ -7,13 +7,14 @@ const rooms: Map<string, GameRoom> = new Map();
 
 export function setupGameHandlers(io: Server, socket: Socket): void {
   // Create a new room
-  socket.on('room:create', (data: { name: string }, callback) => {
-    const room = new GameRoom(io);
+  socket.on('room:create', (data: { name: string; mode?: '1v1' | '2v2' }, callback) => {
+    const mode = data.mode ?? '1v1';
+    const room = new GameRoom(io, mode);
     rooms.set(room.id, room);
     room.addPlayer(socket, data.name);
 
-    callback({ roomId: room.id });
-    console.log(`Room ${room.id} created by ${data.name} (${socket.id})`);
+    callback({ roomId: room.id, mode });
+    console.log(`Room ${room.id} created by ${data.name} (${socket.id}), mode=${mode}`);
   });
 
   // Join an existing room
@@ -30,30 +31,33 @@ export function setupGameHandlers(io: Server, socket: Socket): void {
     }
 
     room.addPlayer(socket, data.name);
-    callback({ roomId: room.id });
-    console.log(`${data.name} (${socket.id}) joined room ${room.id}`);
+    callback({ roomId: room.id, mode: room.gameMode });
+    console.log(`${data.name} (${socket.id}) joined room ${room.id} (mode=${room.gameMode})`);
   });
 
   // Quick match: find or create a room
-  socket.on('room:quickmatch', (data: { name: string; heroId: string }, callback) => {
-    // Find a room that's waiting for a player
+  socket.on('room:quickmatch', (data: { name: string; heroId: string; mode?: '1v1' | '2v2' }, callback) => {
+    const mode = data.mode ?? '1v1';
+
+    // Find a waiting room of the same mode with at least one player already in it.
+    // >= 1 (not === 1) so that partially-filled 2v2 rooms (2 or 3 players) can still be joined.
     let room: GameRoom | undefined;
     for (const [, r] of rooms) {
-      if (!r.isFull && r.playerCount === 1) {
+      if (!r.isFull && r.playerCount >= 1 && r.gameMode === mode) {
         room = r;
         break;
       }
     }
 
     if (!room) {
-      room = new GameRoom(io);
+      room = new GameRoom(io, mode);
       rooms.set(room.id, room);
     }
 
     room.addPlayer(socket, data.name);
     room.selectHero(socket.id, data.heroId);
-    callback({ roomId: room.id });
-    console.log(`${data.name} quick-matched into room ${room.id}`);
+    callback({ roomId: room.id, mode });
+    console.log(`${data.name} quick-matched into room ${room.id} (mode=${mode})`);
   });
 
   // Select a hero
