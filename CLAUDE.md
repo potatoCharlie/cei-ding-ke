@@ -61,7 +61,7 @@ Deploys automatically on push to `main` via Railway's GitHub integration.
 
 Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero tables).
 
-- 1v1, 2v2, 3v3 modes (only 1v1 implemented so far)
+- 1v1 and 2v2 modes (engine supports both; 3v3 structurally supported but disabled until 6+ heroes exist)
 - Each turn: players do rock-paper-scissors, winner gets 1 action
 - Actions: move forward/backward, punch, cast skill, summon minion, stay
 - Infinite 1D map (unbounded positions), max distance between any 2 entities = 3
@@ -75,8 +75,11 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 - **Game state machine**: `rps_submit → rps_resolve → action_phase → effect_resolve → turn_end → loop`
 - **Movement is enemy-relative**: "forward" = toward nearest opponent, "backward" = away. Not team-index based.
 - **Stun-break on active damage only**: `applyEffects(state, effects, breakStun)` — only hero/minion active attacks pass `breakStun=true`. Passive damage (stink aura, frozen DoT) does NOT wake stunned heroes.
-- **Consecutive 3-punch stun**: Counter resets when attacker does a non-punch action. Hellfire minion punches are excluded from this mechanism.
+- **Consecutive 3-punch stun (target-based)**: Tracked per target — `consecutivePunchesReceived` increments when punched by anyone, resets when the target takes ANY action. 3 punches without acting = stun. Hellfire minion punches are excluded from this mechanism.
 - **Max distance constraint**: `isMoveLegal()` in `position.ts` checks all pairwise entity distances before allowing movement.
+- **2v2 multi-player RPS**: Elimination-style — if all 3 choices present → tie, if 2 choices → standard RPS winners/losers. Winners act in sequence via `actionOrder`. Uses `resolveRPSMulti` from `rps.ts`.
+- **2v2 game creation**: `createGameState(gameId, '2v2', players[])` with backward-compatible `(gameId, player1, player2)` overload. No duplicate heroes in 2v2. 3v3 throws until 6+ heroes.
+- **Kuang teammate heal**: 40 HP heal (same as self-cast), no self-damage. Only Kuang allows teammate targeting.
 
 ## Code Conventions
 
@@ -109,16 +112,18 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 2. Handle tick/expiry in `packages/shared/src/game-engine/status-effects.ts`
 3. Add icon in `packages/client/src/scenes/BattleScene.tsx`
 
-## What's Implemented (Phase 1 & 2)
+## What's Implemented (Phase 1, 2 & 3)
 
 - **All 4 heroes** with full skill sets (Nan, Shan, Gao, Jin)
 - **1v1 multiplayer** with RPS turn system, all actions, status effects, minions
+- **2v2 game engine** — multi-player RPS (elimination-style), sequential action execution, target-based punch counter, Kuang teammate heal, Nan multi-target stink aura, mid-round death handling
 - **Client**: Menu → Hero Select → Lobby → Battle → Result, retro pixel-art arena UI, team colors
 - **Server**: Socket.IO rooms (create/join/quick match), authoritative state, phase timeouts
+- **Deployment**: Railway (single service, Fastify + static client)
 
 ## Testing
 
-248 tests in `packages/shared` covering all game logic (zero server/client needed):
+280 tests in `packages/shared` covering all game logic (zero server/client needed):
 
 | Test file | Coverage area |
 |-----------|---------------|
@@ -134,14 +139,18 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 | `suspected-bugs.test.ts` | Magic immunity, minion stun-break, punch counter resets, stun interactions |
 | `available-actions.test.ts` | getAvailableActions for all action types and constraints |
 | `advanced-scenarios.test.ts` | Skill interactions, multi-turn combat, game over conditions, position mechanics |
-| `e2e/scripted-battles.test.ts` | 13 full-match scenarios loaded from `.txt` DSL files (see below) |
-| `e2e/invariant-fuzzer.test.ts` | 800+ random matches checking 11 game invariants across all hero combos |
+| `rps-multi.test.ts` | N-player elimination-style RPS resolution |
+| `2v2-game.test.ts` | 2v2 game creation, RPS resolution, sequential action execution |
+| `2v2-combat.test.ts` | Target-based punch counter, Kuang teammate heal |
+| `2v2-passives.test.ts` | Nan stink aura on multiple enemies |
+| `e2e/scripted-battles.test.ts` | 16 full-match scenarios (1v1 + 2v2) loaded from `.txt` DSL files (see below) |
+| `e2e/invariant-fuzzer.test.ts` | 800+ random 1v1 matches + 60 random 2v2 matches checking invariants |
 
 ### E2E Battle Simulator
 
 The `e2e/` directory contains a battle simulation framework:
 
-- **`battle-simulator.ts`** — Drives full matches through the game engine. Supports scripted scenarios (`simulateBattle`) and random fuzzing (`simulateRandomMatch`).
+- **`battle-simulator.ts`** — Drives full matches through the game engine. Supports scripted scenarios (`simulateBattle`), random 1v1 fuzzing (`simulateRandomMatch`), and random 2v2 fuzzing (`simulateRandomMatch2v2`).
 - **`script-parser.ts`** — Parses human-readable `.txt` scenario files into `BattleScript` objects.
 - **`scenarios/*.txt`** — Test scenarios in a custom text DSL. To add a new test, just add lines to a `.txt` file:
   ```
@@ -153,7 +162,7 @@ The `e2e/` directory contains a battle simulation framework:
     p1 skill small_dart p2
     > p2: hp=95 stunned=true
   ```
-  DSL reference: `heroes:`, `pos:`, `setup p1|p2: key=val`, `turn N: pX wins`, action lines (`punch`, `skill`, `move_forward`, `move_backward`, `summon`, `stay`), `minion` lines, `> pX: key=val` assertions, `> phase=X winner=X` assertions.
+  DSL reference: `heroes:` (2 or 4 heroes), `pos:` (2 or 4 positions), `setup p1|p2|p3|p4: key=val`, `turn N: pX wins` or `turn N: p1 p2 win` (multi-winner), action lines (`punch`, `skill`, `move_forward`, `move_backward`, `summon`, `stay`), `minion` lines, `> pX: key=val` assertions, `> phase=X winner=X` assertions.
 - **`invariant-fuzzer.test.ts`** — Runs random matches and checks invariants (HP bounds, death consistency, distance limits, phase/winner consistency, etc.).
 
 ## Known Design Gaps
@@ -162,9 +171,7 @@ The `e2e/` directory contains a battle simulation framework:
 
 ## What's Next
 
-- **Playtesting & balance tuning** — all mechanics are in, needs real play sessions
-- **2v2 / 3v3 modes** — types already defined, game engine needs multi-hero team support
+- **2v2 server & client** — server room management for 2v2 matches, client UI for 4-player battles, hero draft select
 - **Accounts & persistence** — database, auth, player profiles, match history
 - **Audio & visual polish** — sound effects, animations, pixel art assets
 - **Social features** — chat, friends, leaderboards
-- **Infrastructure** — deployment, error monitoring
