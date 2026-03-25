@@ -11,7 +11,7 @@ import { AnimationManager } from './game/AnimationManager.js';
 import type { BattleAnimation } from './game/AnimationTypes.js';
 import { TimerRope } from './components/TimerRope.js';
 
-type Screen = 'menu' | 'lobby' | 'hero_select' | 'battle' | 'result';
+type Screen = 'menu' | 'lobby' | 'hero_select' | 'team_select' | 'battle' | 'result';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -37,6 +37,7 @@ export default function App() {
     ready: boolean;
   }>>([]);
   const [lobbyMode, setLobbyMode] = useState<'1v1' | '2v2'>('1v1');
+  const [teamSelectReady, setTeamSelectReady] = useState(false);
 
   // Animation state
   const [activeAnimations, setActiveAnimations] = useState<BattleAnimation[]>([]);
@@ -157,6 +158,11 @@ export default function App() {
       setLobbyMode(data.mode);
     });
 
+    socket.on('game:hero_select', () => {
+      setTeamSelectReady(false);
+      setScreen('hero_select');
+    });
+
     socket.on('error', (data) => {
       setError(data.message);
       addLog(`Error: ${data.message}`);
@@ -175,6 +181,7 @@ export default function App() {
       socket.off('player:joined');
       socket.off('player:left');
       socket.off('lobby:update');
+      socket.off('game:hero_select');
       socket.off('error');
     };
   }, [addLog]);
@@ -185,7 +192,7 @@ export default function App() {
       await connectSocket();
       socket.emit('room:create', { name: playerName, mode }, (res: { roomId: string; mode: '1v1' | '2v2' }) => {
         setRoomId(res.roomId);
-        setScreen('hero_select');
+        setScreen(res.mode === '2v2' ? 'team_select' : 'hero_select');
         addLog(`Room created: ${res.roomId} (${mode})`);
       });
     } catch {
@@ -201,7 +208,7 @@ export default function App() {
         if (res.error) { setError(res.error); return; }
         if (res.mode) setLobbyMode(res.mode);
         setRoomId(res.roomId!);
-        setScreen('hero_select');
+        setScreen(res.mode === '2v2' ? 'team_select' : 'hero_select');
         addLog(`Joined room: ${res.roomId}`);
       });
     } catch {
@@ -324,6 +331,112 @@ export default function App() {
           {error && <div className="error-banner">{error}</div>}
         </div>
 
+        <style>{menuStyles}</style>
+      </div>
+    );
+  }
+
+  // ─── TEAM SELECT (2v2 only) ───
+  if (screen === 'team_select') {
+    const slotsPerTeam = 2;
+    const team0 = lobbyPlayers.filter(p => p.teamIndex === 0);
+    const team1 = lobbyPlayers.filter(p => p.teamIndex === 1);
+    const waiting = lobbyPlayers.filter(p => p.teamIndex === -1);
+    const me = lobbyPlayers.find(p => p.id === socket.id);
+    const myTeamIndex = me?.teamIndex ?? -1;
+    const iAmOnTeam = myTeamIndex >= 0;
+
+    const handleJoinTeam = (teamIndex: 0 | 1) => {
+      socket.emit('team:join', { teamIndex });
+    };
+    const handleLeaveTeam = () => {
+      socket.emit('team:leave');
+      setTeamSelectReady(false);
+    };
+    const handleReady = () => {
+      socket.emit('lobby:ready');
+      setTeamSelectReady(true);
+    };
+
+    const renderTeamSlots = (teamPlayers: typeof lobbyPlayers, teamIndex: 0 | 1) => {
+      const isMyTeam = myTeamIndex === teamIndex;
+      const teamColor = teamIndex === 0 ? 'var(--team-blue)' : 'var(--team-red)';
+      const teamBg = teamIndex === 0 ? 'rgba(59,130,246,0.08)' : 'rgba(239,68,68,0.08)';
+      const teamBorder = teamIndex === 0 ? 'rgba(59,130,246,0.4)' : 'rgba(239,68,68,0.4)';
+      const label = teamIndex === 0 ? '🔵 Team Blue' : '🔴 Team Red';
+      const isFull = teamPlayers.length >= slotsPerTeam;
+
+      return (
+        <div style={{ flex: 1, background: teamBg, border: `2px solid ${teamBorder}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 1, color: teamColor, marginBottom: 10, fontWeight: 700 }}>{label}</div>
+          {Array.from({ length: slotsPerTeam }).map((_, i) => {
+            const p = teamPlayers[i];
+            return (
+              <div key={i} style={{ background: p ? `${teamColor}15` : 'transparent', border: `1px solid ${p ? `${teamColor}40` : `${teamColor}20`}`, borderRadius: 6, padding: '8px 12px', marginBottom: 6, fontStyle: p ? 'normal' : 'italic', color: p ? '#e2e8f0' : '#64748b', fontSize: p ? 13 : 12 }}>
+                {p ? (
+                  <span>{p.name}{p.id === socket.id ? <span style={{ fontSize: 10, color: teamColor }}> (you)</span> : ''}{p.ready ? <span style={{ fontSize: 10, color: '#22c55e' }}> ✓</span> : ''}</span>
+                ) : (
+                  <span>Waiting for player...</span>
+                )}
+              </div>
+            );
+          })}
+          {myTeamIndex !== teamIndex && !isFull && (
+            <button className="game-btn game-btn-secondary" style={{ width: '100%', fontSize: 12, padding: '6px 0', marginTop: 4 }} onClick={() => handleJoinTeam(teamIndex)}>
+              → Join {teamIndex === 0 ? 'Blue' : 'Red'} Team
+            </button>
+          )}
+          {isMyTeam && (
+            <button className="game-btn" style={{ width: '100%', fontSize: 12, padding: '6px 0', marginTop: 4, background: '#1e293b', border: '1px solid #475569', color: '#94a3b8' }} onClick={handleLeaveTeam}>
+              ↩ Leave to Waiting Area
+            </button>
+          )}
+          {myTeamIndex !== teamIndex && isFull && (
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', marginTop: 4 }}>Full</div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="app-container">
+        <div className="lobby-screen">
+          <h2 className="screen-title">Team Selection</h2>
+          <div className="room-display">
+            <span className="room-label">Room Code</span>
+            <span className="room-code">{roomId}</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr', gap: 10, alignItems: 'start', margin: '16px 0' }}>
+            {renderTeamSlots(team0, 0)}
+
+            <div style={{ background: 'rgba(71,85,105,0.15)', border: '2px dashed rgba(71,85,105,0.4)', borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: 1, color: '#64748b', marginBottom: 8, fontWeight: 700, textAlign: 'center' as const }}>⏳ Waiting</div>
+              {waiting.length === 0 ? (
+                <div style={{ border: '1px dashed #37415150', borderRadius: 6, padding: '6px 8px', color: '#475569', fontSize: 11, textAlign: 'center' as const, fontStyle: 'italic' }}>empty</div>
+              ) : waiting.map(p => (
+                <div key={p.id} style={{ border: '1px solid #47556940', borderRadius: 6, padding: '6px 8px', marginBottom: 4, color: '#94a3b8', fontSize: 11, textAlign: 'center' as const }}>
+                  {p.name}{p.id === socket.id ? ' (you)' : ''}
+                </div>
+              ))}
+            </div>
+
+            {renderTeamSlots(team1, 1)}
+          </div>
+
+          <button
+            className={`game-btn ${iAmOnTeam && !teamSelectReady ? 'game-btn-primary' : ''}`}
+            disabled={!iAmOnTeam || teamSelectReady}
+            onClick={handleReady}
+            style={{ width: '100%', fontSize: 14, fontWeight: 700, padding: 12 }}
+          >
+            {teamSelectReady ? 'Ready ✓' : 'Ready'}
+          </button>
+          <div style={{ textAlign: 'center' as const, fontSize: 11, color: '#64748b', marginTop: 6 }}>
+            {iAmOnTeam ? 'Click Ready when your team is set' : 'Join a team first'}
+          </div>
+        </div>
+        <GameLog logs={logs} />
         <style>{menuStyles}</style>
       </div>
     );
