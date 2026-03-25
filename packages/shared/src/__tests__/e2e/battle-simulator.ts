@@ -119,6 +119,32 @@ function winRPS(state: GameState, winnerIds: string[]): void {
 }
 
 /**
+ * Asserts that the winner list passed to winRPS is valid (all alive and non-stunned).
+ * Throws immediately — this is a fuzzer construction bug, not an engine violation.
+ */
+function assertWinnerListValid(state: GameState, winnerIds: string[]): void {
+  for (const id of winnerIds) {
+    let found = false;
+    for (const team of state.teams) {
+      for (const player of team.players) {
+        if (player.id === id) {
+          found = true;
+          if (!player.hero.alive) {
+            throw new Error(`FUZZER BUG: winner '${id}' is not alive`);
+          }
+          if (isStunned(player.hero)) {
+            throw new Error(`FUZZER BUG: winner '${id}' is stunned`);
+          }
+        }
+      }
+    }
+    if (!found) {
+      throw new Error(`FUZZER BUG: winner '${id}' is not a valid player ID`);
+    }
+  }
+}
+
+/**
  * Simulate a full battle from a script. Returns a BattleLog.
  * Throws on assertion failures with the full log for debugging.
  */
@@ -375,6 +401,31 @@ export function checkInvariants(state: GameState): string[] {
     violations.push(`Invalid phase: ${state.phase}`);
   }
 
+  // Dead team → game over
+  for (let i = 0; i < state.teams.length; i++) {
+    const team = state.teams[i];
+    if (team.players.length > 0 && team.players.every(p => !p.hero.alive)) {
+      if (state.winner === null || state.phase !== 'game_over') {
+        violations.push(`Team ${i} all players dead but game not over (phase=${state.phase}, winner=${state.winner})`);
+      }
+    }
+  }
+
+  // currentActionIndex must not exceed actionOrder length
+  if (state.currentActionIndex > state.actionOrder.length) {
+    violations.push(`currentActionIndex ${state.currentActionIndex} exceeds actionOrder.length ${state.actionOrder.length}`);
+  }
+
+  // No duplicate IDs in actionOrder
+  const seen = new Set<string>();
+  for (const id of state.actionOrder) {
+    if (seen.has(id)) {
+      violations.push(`Duplicate ID '${id}' in actionOrder: [${state.actionOrder.join(', ')}]`);
+      break;
+    }
+    seen.add(id);
+  }
+
   return violations;
 }
 
@@ -426,16 +477,29 @@ export function simulateRandomMatch(
       }
     }
 
-    // Random RPS winner
-    const winner = Math.random() < 0.5 ? 'p1' : 'p2';
-    // Check if winner is alive; if not, pick the other
+    // Random RPS winner — must be alive and non-stunned
     const h1 = getHeroState(state, 'p1');
     const h2 = getHeroState(state, 'p2');
-    let actualWinner = winner;
-    if (winner === 'p1' && !h1.alive) actualWinner = 'p2';
-    if (winner === 'p2' && !h2.alive) actualWinner = 'p1';
+    const p1Eligible = h1.alive && !isStunned(h1);
+    const p2Eligible = h2.alive && !isStunned(h2);
+
+    let actualWinner: string;
+    if (p1Eligible && p2Eligible) {
+      actualWinner = Math.random() < 0.5 ? 'p1' : 'p2';
+    } else if (p1Eligible) {
+      actualWinner = 'p1';
+    } else if (p2Eligible) {
+      actualWinner = 'p2';
+    } else {
+      // Both stunned — advance turn with a no-op to avoid infinite loop
+      const aliveId = ['p1', 'p2'].find(id => getHeroState(state, id).alive) ?? 'p1';
+      winRPS(state, [aliveId]);
+      executeAction(state, { type: 'stay', playerId: aliveId });
+      continue;
+    }
 
     winRPS(state, [actualWinner]);
+    assertWinnerListValid(state, [actualWinner]);
 
     // Pick random hero action
     const heroAction = pickRandomAction(state, actualWinner);
@@ -546,6 +610,7 @@ export function simulateRandomMatch2v2(
     const winners = shuffled.slice(0, numWinners);
 
     winRPS(state, winners);
+    assertWinnerListValid(state, winners);
 
     // Execute actions for each winner
     const allHeroEffects: GameEffect[] = [];
