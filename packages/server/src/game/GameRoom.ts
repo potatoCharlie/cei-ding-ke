@@ -23,6 +23,7 @@ export class GameRoom {
   private io: Server;
   private rpsTimer: ReturnType<typeof setTimeout> | null = null;
   private actionTimer: ReturnType<typeof setTimeout> | null = null;
+  private heroSelectPhaseStarted = false;
   private mode: '1v1' | '2v2';
   private maxPlayers: number;
 
@@ -56,9 +57,9 @@ export class GameRoom {
   addPlayer(socket: Socket, name: string): boolean {
     if (this.isFull) return false;
 
-    // Alternating team assignment by join order: 0→team0, 1→team1, 2→team0, 3→team1
+    // 1v1: alternating team assignment. 2v2: waiting area (-1), team chosen in lobby.
     const joinIndex = this.players.size;
-    const teamIndex = joinIndex % 2;
+    const teamIndex = this.mode === '1v1' ? joinIndex % 2 : -1;
 
     const player: RoomPlayer = {
       id: socket.id,
@@ -100,6 +101,9 @@ export class GameRoom {
     const player = this.players.get(socketId);
     if (!player) return;
 
+    // In 2v2, hero selection is only meaningful after the team lobby has completed
+    if (this.mode === '2v2' && !this.heroSelectPhaseStarted) return;
+
     // Check for duplicate hero across all current selections
     for (const [id, p] of this.players) {
       if (id !== socketId && p.heroId === heroId) {
@@ -114,6 +118,81 @@ export class GameRoom {
 
     const allReady = Array.from(this.players.values()).every(p => p.ready && p.heroId);
     if (allReady && this.players.size === this.maxPlayers) {
+      this.startGame();
+    }
+  }
+
+  handleTeamJoin(socketId: string, teamIndex: 0 | 1): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    if (player.teamIndex !== -1) return; // must be in waiting area
+
+    const teamSize = this.mode === '2v2' ? this.maxPlayers / 2 : 1;
+    const currentTeamCount = Array.from(this.players.values()).filter(
+      p => p.teamIndex === teamIndex,
+    ).length;
+    if (currentTeamCount >= teamSize) return; // team full
+
+    player.teamIndex = teamIndex;
+    this.emitLobbyUpdate();
+  }
+
+  handleTeamLeave(socketId: string): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    player.teamIndex = -1;
+    player.ready = false;
+    this.emitLobbyUpdate();
+  }
+
+  handleLobbyReady(socketId: string): void {
+    if (this.heroSelectPhaseStarted) return; // already transitioned
+    const player = this.players.get(socketId);
+    if (!player) return;
+    if (player.teamIndex === -1) return; // must be on a team to ready up
+
+    player.ready = true;
+    this.emitLobbyUpdate();
+
+    // All players on a team and all ready → start hero select
+    const allPlayers = Array.from(this.players.values());
+    const allOnTeams = allPlayers.every(p => p.teamIndex >= 0);
+    const allReady = allPlayers.every(p => p.ready);
+
+    if (
+      allOnTeams &&
+      allReady &&
+      allPlayers.length === this.maxPlayers
+    ) {
+      this.heroSelectPhaseStarted = true;
+      // Reset ready flags so they can be reused for hero-select phase
+      for (const p of allPlayers) p.ready = false;
+      this.io.to(this.id).emit('game:hero_select');
+      this.emitLobbyUpdate();
+    }
+  }
+
+  setHeroForQuickMatch(socketId: string, heroId: string): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    player.heroId = heroId;
+  }
+
+  tryAutoStartHeroSelect(): void {
+    if (this.mode !== '2v2') return;
+    if (!this.isFull) return;
+
+    // Auto-assign teams by join order: players 0,2 → team 0; players 1,3 → team 1
+    const players = Array.from(this.players.values());
+    players.forEach((p, i) => { p.teamIndex = i % 2; });
+
+    this.heroSelectPhaseStarted = true;
+    this.io.to(this.id).emit('game:hero_select');
+    this.emitLobbyUpdate();
+
+    // All heroes already stored via setHeroForQuickMatch — start immediately
+    const allHeroesSet = players.every(p => p.heroId);
+    if (allHeroesSet) {
       this.startGame();
     }
   }
