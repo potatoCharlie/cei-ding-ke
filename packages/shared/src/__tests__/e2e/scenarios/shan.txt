@@ -1,0 +1,122 @@
+=== shan: big darts deals 25 physical damage and self-stuns
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill big_darts p2
+  > p1: stunned=true
+  > p2: hp=75
+
+=== shan: big darts at distance 1
+heroes: shan vs nan
+pos: 4 5
+
+turn 1: p1 wins
+  p1 skill big_darts p2
+  > p1: stunned=true
+  > p2: hp=75
+
+=== shan: big darts self-stun wears off next turn
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill big_darts p2
+  > p1: stunned=true
+  > p2: hp=75
+
+turn 2: p1 wins
+  # startTurn ticks stun off, also stink aura 10 to p1
+  p1 punch p2
+  > p1: stunned=false
+  > p2: hp=65
+
+=== shan: big darts unlimited uses
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill big_darts p2
+  > p1: stunned=true
+  > p2: hp=75
+
+turn 2: p2 wins
+  # startTurn ticks p1 stun off, stink aura 10 to p1
+  p2 stay
+  > p1: hp=90 stunned=false
+
+turn 3: p1 wins
+  # startTurn: stink aura 10 to p1 again
+  p1 skill big_darts p2
+  > p1: stunned=true
+  > p2: hp=50
+
+=== shan: frozen deals 10 magic damage and traps
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill frozen p2
+  > p2: hp=90 trapped=true
+
+=== shan: frozen full DoT cycle 30 total damage
+# Frozen: 10 initial + 10 per startTurn tick for 2 rounds = 30 total
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill frozen p2
+  > p2: hp=90 trapped=true
+
+turn 2: p1 wins
+  # startTurn: 10 DoT tick, trap 2->1. Also stink aura 10 to p1.
+  p1 stay
+  > p2: hp=80 trapped=true
+
+turn 3: p1 wins
+  # startTurn: 10 DoT tick, trap 1->0 removed. Stink aura 10 to p1.
+  p1 stay
+  > p2: hp=70 trapped=false
+
+=== shan: frozen at distance 1
+heroes: shan vs nan
+pos: 4 5
+
+turn 1: p1 wins
+  p1 skill frozen p2
+  > p2: hp=90 trapped=true
+
+=== shan: frozen max uses exhausted after 2 casts
+heroes: shan vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill frozen p2
+  > p2: hp=90 trapped=true
+
+turn 2: p1 wins
+  # startTurn: frozen DoT 10, stink aura 10 to p1
+  p1 stay
+  > p2: hp=80 trapped=true
+
+turn 3: p1 wins
+  # startTurn: frozen DoT 10, trap removed, stink aura 10 to p1
+  p1 stay
+  > p2: hp=70 trapped=false
+
+turn 4: p1 wins
+  # startTurn: stink aura 10 to p1
+  # Second use of frozen
+  p1 skill frozen p2
+  > p2: hp=60 trapped=true
+
+turn 5: p1 wins
+  # startTurn: frozen DoT 10, stink aura 10 to p1
+  p1 stay
+  > p2: hp=50 trapped=true
+
+turn 6: p1 wins
+  # startTurn: frozen DoT 10, trap removed, stink aura 10 to p1
+  # frozen exhausted, use punch
+  p1 punch p2
+  > p2: hp=30

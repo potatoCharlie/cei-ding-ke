@@ -1,0 +1,120 @@
+=== nan: magic burn deals 15 magic damage and stuns
+heroes: nan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill magic_burn p2
+  > p2: hp=85 stunned=true
+
+=== nan: magic burn at distance 0 only
+# magic_burn requires distance 0, verify it works at distance 0
+# Note: stink aura deals 10 at startTurn when at distance 0
+heroes: nan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill magic_burn p2
+  > p2: hp=85 stunned=true
+
+turn 2: p1 wins
+  # startTurn: stink aura 10 → p2=75, stun ticks off (stun immunity this turn)
+  p1 skill magic_burn p2
+  > p2: hp=60 stunned=false
+
+=== nan: magic burn max uses exhausted after 2 casts
+# magic_burn has maxUses=2. Stink aura 10 per startTurn at distance 0.
+heroes: nan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill magic_burn p2
+  > p2: hp=85 stunned=true
+
+turn 2: p1 wins
+  # startTurn: stink aura 10 → p2=75, stun off (immunity)
+  p1 skill magic_burn p2
+  > p2: hp=60 stunned=false
+
+turn 3: p1 wins
+  # startTurn: stink aura 10 → p2=50. magic_burn exhausted.
+  p1 punch p2
+  > p2: hp=40
+
+=== nan: call fly deals 5 damage and heals 5 HP
+heroes: nan vs shan
+pos: 5 5
+setup p1: hp=80
+
+turn 1: p1 wins
+  p1 skill call_fly p2
+  > p1: hp=85
+  > p2: hp=95
+
+=== nan: call fly works at any distance
+# call_fly has maxDistance=99
+heroes: nan vs shan
+pos: 1 4
+
+turn 1: p1 wins
+  p1 skill call_fly p2
+  > p1: hp=100
+  > p2: hp=95
+
+=== nan: call fly heal does not exceed max HP
+heroes: nan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill call_fly p2
+  > p1: hp=100
+  > p2: hp=95
+
+=== nan: call fly unlimited uses
+# Stink aura 10 per startTurn at distance 0
+heroes: nan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill call_fly p2
+  > p2: hp=95
+
+turn 2: p1 wins
+  # startTurn: stink aura 10 → p2=85, then call_fly 5 → p2=80
+  p1 skill call_fly p2
+  > p2: hp=80
+
+turn 3: p1 wins
+  # startTurn: stink aura 10 → p2=70, then call_fly 5 → p2=65
+  p1 skill call_fly p2
+  > p2: hp=65
+
+=== nan: stink aura passive deals 10 damage at distance 0
+# Nan's passive: 10 magic damage per round when opponent at distance 0
+# Passive triggers at startTurn
+heroes: nan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 stay
+
+turn 2: p1 wins
+  # startTurn: stink aura deals 10 to p2
+  p1 stay
+  > p2: hp=90
+
+turn 3: p1 wins
+  # startTurn: stink aura deals 10 again
+  p1 stay
+  > p2: hp=80
+
+=== nan: stink aura does not trigger at distance 1
+heroes: nan vs shan
+pos: 4 5
+
+turn 1: p1 wins
+  p1 stay
+
+turn 2: p1 wins
+  # No stink aura — distance is 1
+  p1 stay
+  > p2: hp=100

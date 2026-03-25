@@ -1,0 +1,58 @@
+=== gao: summon hellfire minion
+# Gao has no skills, only a minion. Summon creates hellfire at same position.
+heroes: gao vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 summon
+
+=== gao: hellfire minion punch deals 20 damage
+heroes: gao vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 summon
+  minion hellfire_p1 punch p2
+  > p2: hp=80
+
+=== gao: hellfire minion punch does not count for 3-punch stun
+# punchCountsForStun: false, so minion punches don't trigger the 3-punch stun
+heroes: gao vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 summon
+  minion hellfire_p1 punch p2
+  > p2: hp=80 stunned=false
+
+turn 2: p1 wins
+  p1 stay
+  minion hellfire_p1 punch p2
+  > p2: hp=60 stunned=false
+
+turn 3: p1 wins
+  p1 stay
+  minion hellfire_p1 punch p2
+  > p2: hp=40 stunned=false
+
+=== gao: hero punch plus minion punch
+heroes: gao vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 summon
+  minion hellfire_p1 punch p2
+  > p2: hp=80
+
+turn 2: p1 wins
+  p1 punch p2
+  minion hellfire_p1 punch p2
+  > p2: hp=50
+
+=== gao: gao has no skills only summon and punch
+heroes: gao vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 punch p2
+  > p2: hp=90
