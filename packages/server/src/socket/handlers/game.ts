@@ -55,7 +55,12 @@ export function setupGameHandlers(io: Server, socket: Socket): void {
     }
 
     room.addPlayer(socket, data.name);
-    room.selectHero(socket.id, data.heroId);
+    if (room.gameMode === '1v1') {
+      room.selectHero(socket.id, data.heroId);
+    } else {
+      room.setHeroForQuickMatch(socket.id, data.heroId);
+      room.tryAutoStartHeroSelect();
+    }
     callback({ roomId: room.id, mode });
     console.log(`${data.name} quick-matched into room ${room.id} (mode=${mode})`);
   });
@@ -65,6 +70,25 @@ export function setupGameHandlers(io: Server, socket: Socket): void {
     const room = findPlayerRoom(socket.id);
     if (!room) return;
     room.selectHero(socket.id, data.heroId);
+  });
+
+  // Team lobby (2v2 manual rooms only)
+  socket.on('team:join', (data: { teamIndex: 0 | 1 }) => {
+    const room = findPlayerRoom(socket.id);
+    if (!room) return;
+    room.handleTeamJoin(socket.id, data.teamIndex);
+  });
+
+  socket.on('team:leave', () => {
+    const room = findPlayerRoom(socket.id);
+    if (!room) return;
+    room.handleTeamLeave(socket.id);
+  });
+
+  socket.on('lobby:ready', () => {
+    const room = findPlayerRoom(socket.id);
+    if (!room) return;
+    room.handleLobbyReady(socket.id);
   });
 
   // Submit RPS choice
