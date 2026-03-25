@@ -181,7 +181,7 @@ export class GameRoom {
       return;
     }
 
-    if (stunnedPlayers.length > 0 && nonStunnedPlayers.length > 0) {
+    if (stunnedPlayers.length > 0 && nonStunnedPlayers.length === 1) {
       // Auto-resolve: non-stunned player gets to act without RPS
       this.state.phase = 'action_phase';
       this.state.actionOrder = nonStunnedPlayers.map(p => p.id);
