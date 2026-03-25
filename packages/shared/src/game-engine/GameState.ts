@@ -4,37 +4,104 @@ import type {
 } from '../types/game.js';
 import type { HeroDefinition } from '../types/hero.js';
 import { PUNCH_STUN_THRESHOLD, TEAM_0_START, TEAM_1_START } from '../constants.js';
-import { resolveRPS1v1, randomRPSChoice } from './rps.js';
+import { resolveRPS1v1, resolveRPSMulti, randomRPSChoice } from './rps.js';
 import { moveForward, moveBackward } from './movement.js';
 import { executePunch, executeSkill, executeWindWalkPunch } from './combat.js';
 import { applyStatusEffect, tickStatusEffects, applyPassiveEffects, isStunned } from './status-effects.js';
 import { getHero } from '../heroes/registry.js';
 import { getDistance, getForwardDirection, getTeamIndex, isMoveLegal, findOpponentHero } from './position.js';
 
+type PlayerInput = { id: string; name: string; heroId: string };
+type PlayerInputMulti = { id: string; name: string; heroId: string; teamIndex: number };
+type GameMode = '1v1' | '2v2' | '3v3';
+
 /**
- * Create a new game state for a 1v1 match.
+ * Create a new game state.
+ *
+ * Old 1v1 signature (backward-compatible):
+ *   createGameState(gameId, player1, player2)
+ *
+ * New multi-player signature:
+ *   createGameState(gameId, mode, players)
  */
 export function createGameState(
   gameId: string,
-  player1: { id: string; name: string; heroId: string },
-  player2: { id: string; name: string; heroId: string },
+  player1: PlayerInput,
+  player2: PlayerInput,
+): GameState;
+export function createGameState(
+  gameId: string,
+  mode: GameMode,
+  players: PlayerInputMulti[],
+): GameState;
+export function createGameState(
+  gameId: string,
+  player1OrMode: PlayerInput | GameMode,
+  player2OrPlayers: PlayerInput | PlayerInputMulti[],
 ): GameState {
-  const p1State = createPlayerState(player1.id, player1.name, player1.heroId, TEAM_0_START);
-  const p2State = createPlayerState(player2.id, player2.name, player2.heroId, TEAM_1_START);
+  // Detect which overload was called
+  if (typeof player1OrMode === 'string') {
+    // New signature: createGameState(gameId, mode, players)
+    const mode = player1OrMode;
+    const players = player2OrPlayers as PlayerInputMulti[];
+    return createGameStateMulti(gameId, mode, players);
+  } else {
+    // Old signature: createGameState(gameId, player1, player2)
+    const player1 = player1OrMode;
+    const player2 = player2OrPlayers as PlayerInput;
+    return createGameStateMulti(gameId, '1v1', [
+      { ...player1, teamIndex: 0 },
+      { ...player2, teamIndex: 1 },
+    ]);
+  }
+}
 
-  const positionsAtTurnStart: Record<string, number> = {
-    [player1.id]: TEAM_0_START,
-    [player2.id]: TEAM_1_START,
+function createGameStateMulti(
+  gameId: string,
+  mode: GameMode,
+  players: PlayerInputMulti[],
+): GameState {
+  // Reject 3v3 for now
+  if (mode === '3v3') {
+    throw new Error('3v3 mode is not available yet (requires 6+ heroes)');
+  }
+
+  // Validate unique heroes (only enforced for multi-player modes, not 1v1)
+  if (mode !== '1v1') {
+    const heroIds = players.map(p => p.heroId);
+    if (new Set(heroIds).size !== heroIds.length) {
+      throw new Error('Duplicate hero IDs not allowed');
+    }
+  }
+
+  const startPositions: Record<number, number> = {
+    0: TEAM_0_START,
+    1: TEAM_1_START,
   };
+
+  const positionsAtTurnStart: Record<string, number> = {};
+  const team0Players: PlayerState[] = [];
+  const team1Players: PlayerState[] = [];
+
+  for (const p of players) {
+    const startPos = startPositions[p.teamIndex];
+    const playerState = createPlayerState(p.id, p.name, p.heroId, startPos);
+    positionsAtTurnStart[p.id] = startPos;
+    if (p.teamIndex === 0) {
+      team0Players.push(playerState);
+    } else {
+      team1Players.push(playerState);
+    }
+  }
 
   return {
     id: gameId,
-    mode: '1v1',
+    mode,
     phase: 'rps_submit',
     turn: 1,
     teams: [
-      { teamIndex: 0, players: [p1State] },
-      { teamIndex: 1, players: [p2State] },
+      { teamIndex: 0, players: team0Players },
+      { teamIndex: 1, players: team1Players },
     ],
     positionsAtTurnStart,
     pendingRPS: {},
@@ -101,51 +168,60 @@ export function resolveRPSRound(state: GameState): RPSResult {
   const allPlayers = getAllAlivePlayers(state);
   const nonStunnedPlayers = allPlayers.filter(p => !isStunned(p.hero));
 
+  // Auto-fill missing choices with random
   for (const player of nonStunnedPlayers) {
     if (state.pendingRPS[player.id] == null) {
       state.pendingRPS[player.id] = randomRPSChoice();
     }
   }
 
-  if (state.mode === '1v1' && nonStunnedPlayers.length === 2) {
-    const p1 = nonStunnedPlayers[0];
-    const p2 = nonStunnedPlayers[1];
-    const result = resolveRPS1v1(
-      p1.id, state.pendingRPS[p1.id]!,
-      p2.id, state.pendingRPS[p2.id]!,
-    );
-
-    state.phase = result.draw ? 'rps_submit' : 'action_phase';
-    if (!result.draw) {
-      state.actionOrder = result.winners;
-      state.currentActionIndex = 0;
-    }
-
-    state.pendingRPS = {};
-    return result;
-  }
-
-  if (state.mode === '1v1' && nonStunnedPlayers.length === 1) {
-    const winner = nonStunnedPlayers[0];
-    const loser = allPlayers.find(p => p.id !== winner.id)!;
+  // Only one non-stunned player: they win automatically
+  if (nonStunnedPlayers.length <= 1) {
+    const winners = nonStunnedPlayers.map(p => p.id);
+    const losers = allPlayers.filter(p => !winners.includes(p.id)).map(p => p.id);
 
     const result: RPSResult = {
-      choices: { [winner.id]: 'rock' },
-      winners: [winner.id],
-      losers: [loser.id],
+      choices: { ...state.pendingRPS } as Record<string, RPSChoice>,
+      winners,
+      losers,
       draw: false,
     };
 
     state.phase = 'action_phase';
-    state.actionOrder = [winner.id];
+    state.actionOrder = winners;
     state.currentActionIndex = 0;
     state.pendingRPS = {};
-
     return result;
   }
 
+  // Build choices map for non-stunned players
+  const choices: Record<string, RPSChoice> = {};
+  for (const p of nonStunnedPlayers) {
+    choices[p.id] = state.pendingRPS[p.id]!;
+  }
+
+  const multiResult = resolveRPSMulti(choices);
+
+  const allChoices = { ...state.pendingRPS } as Record<string, RPSChoice>;
   state.pendingRPS = {};
-  return { choices: {}, winners: [], losers: [], draw: true };
+
+  if (!multiResult) {
+    // Tie
+    return { choices: allChoices, winners: [], losers: [], draw: true };
+  }
+
+  const stunnedIds = allPlayers.filter(p => isStunned(p.hero)).map(p => p.id);
+
+  state.phase = 'action_phase';
+  state.actionOrder = multiResult.winners;
+  state.currentActionIndex = 0;
+
+  return {
+    choices: allChoices,
+    winners: multiResult.winners,
+    losers: [...multiResult.losers, ...stunnedIds],
+    draw: false,
+  };
 }
 
 /**
@@ -181,12 +257,9 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
     return effects;
   }
 
-  // If hero does anything other than punch, reset opponents' consecutive punch counters
-  if (!action.minionId && action.type !== 'punch') {
-    const opponents = state.teams.flatMap(t => t.players).filter(p => p.id !== action.playerId);
-    for (const opp of opponents) {
-      opp.hero.consecutivePunchesReceived = 0;
-    }
+  // Acting hero resets their own received punch counter
+  if (!action.minionId) {
+    player.hero.consecutivePunchesReceived = 0;
   }
 
   // ─── Hero action ───
@@ -499,7 +572,7 @@ function executeSummon(state: GameState, playerId: string): GameEffect[] {
 /**
  * End the current turn.
  */
-function endTurn(state: GameState): void {
+export function endTurn(state: GameState): void {
   const passiveEffects = applyPassiveEffects(state);
   applyEffects(state, passiveEffects);
 
@@ -669,6 +742,16 @@ export function getAvailableActions(state: GameState, playerId: string): PlayerA
           if (d >= skill.minDistance && d <= skill.maxDistance) {
             actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: playerId });
             actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: opp.id });
+          }
+        }
+        // Kuang can also target teammates
+        const teammates = state.teams
+          .find(t => t.players.some(p => p.id === playerId))
+          ?.players.filter(p => p.id !== playerId && p.hero.alive) ?? [];
+        for (const mate of teammates) {
+          const d = getDistance(hero.position, mate.hero.position);
+          if (d >= skill.minDistance && d <= skill.maxDistance) {
+            actions.push({ type: 'skill', playerId, skillId: skill.id, targetId: mate.id });
           }
         }
       } else {

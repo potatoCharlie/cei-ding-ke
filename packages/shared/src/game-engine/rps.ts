@@ -43,6 +43,40 @@ export function resolveRPS1v1(
 }
 
 /**
+ * Resolve an N-player RPS round (elimination style).
+ * Returns null if tie (all 3 choices present, or all same choice).
+ * Returns { winners, losers } if exactly 2 distinct choices.
+ */
+export function resolveRPSMulti(
+  choices: Record<string, RPSChoice>,
+): { winners: string[]; losers: string[] } | null {
+  const players = Object.keys(choices);
+  if (players.length <= 1) {
+    return { winners: players, losers: [] };
+  }
+
+  const distinctChoices = new Set(Object.values(choices));
+  // All same or all 3 present = tie
+  if (distinctChoices.size !== 2) return null;
+
+  const [choiceA, choiceB] = [...distinctChoices];
+  const result = compareRPS(choiceA, choiceB);
+  const winningChoice = result === 1 ? choiceA : choiceB;
+
+  const winners: string[] = [];
+  const losers: string[] = [];
+  for (const [id, choice] of Object.entries(choices)) {
+    if (choice === winningChoice) {
+      winners.push(id);
+    } else {
+      losers.push(id);
+    }
+  }
+
+  return { winners, losers };
+}
+
+/**
  * Pick a random RPS choice (used for timeouts).
  */
 export function randomRPSChoice(): RPSChoice {

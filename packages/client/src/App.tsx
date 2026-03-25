@@ -18,6 +18,7 @@ export default function App() {
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [joinRoomId, setJoinRoomId] = useState('');
+  const [mode, setMode] = useState<'1v1' | '2v2'>('1v1');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [rpsResult, setRpsResult] = useState<{ choices: Record<string, RPSChoice>; winners: string[]; losers: string[]; draw: boolean } | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
@@ -26,6 +27,16 @@ export default function App() {
   const [selectedHero, setSelectedHero] = useState('');
   const [error, setError] = useState('');
   const [gameOverWinner, setGameOverWinner] = useState<number | null>(null);
+
+  // Lobby state
+  const [lobbyPlayers, setLobbyPlayers] = useState<Array<{
+    id: string;
+    name: string;
+    heroId: string;
+    teamIndex: number;
+    ready: boolean;
+  }>>([]);
+  const [lobbyMode, setLobbyMode] = useState<'1v1' | '2v2'>('1v1');
 
   // Animation state
   const [activeAnimations, setActiveAnimations] = useState<BattleAnimation[]>([]);
@@ -36,6 +47,7 @@ export default function App() {
   const [timerStart, setTimerStart] = useState(0);
 
   const animManagerRef = useRef<AnimationManager | null>(null);
+  const gameStateRef = useRef<GameState | null>(null);
 
   // Initialize animation manager
   useEffect(() => {
@@ -53,6 +65,7 @@ export default function App() {
 
   useEffect(() => {
     socket.on('game:state', (state: GameState) => {
+      gameStateRef.current = state;
       setGameState(state);
       setScreen('battle');
     });
@@ -82,11 +95,11 @@ export default function App() {
       }
     });
 
-    socket.on('rps:waiting', (data) => {
-      addLog(`Waiting for RPS... (${data.submitted.length}/2 submitted)`);
+    socket.on('rps:waiting', (data: { submitted: string[]; total: number }) => {
+      addLog(`Waiting for RPS... (${data.submitted.length}/${data.total} submitted)`);
     });
 
-    socket.on('action:request', (data) => {
+    socket.on('action:request', (data: { playerId: string; timeLimit: number }) => {
       if (data.playerId === socket.id) {
         setIsMyTurn(true);
         setTimerTotal(ACTION_TIMER);
@@ -94,7 +107,10 @@ export default function App() {
         addLog('Your turn to act!');
       } else {
         setIsMyTurn(false);
-        addLog('Opponent is choosing their action...');
+        const playerName = gameStateRef.current
+          ? (gameStateRef.current.teams.flatMap(t => t.players).find(p => p.id === data.playerId)?.name ?? 'Opponent')
+          : 'Opponent';
+        addLog(`${playerName} is choosing their action...`);
       }
     });
 
@@ -136,6 +152,11 @@ export default function App() {
       addLog(`Player ${data.playerId} left`);
     });
 
+    socket.on('lobby:update', (data: { mode: '1v1' | '2v2'; players: Array<{ id: string; name: string; heroId: string; teamIndex: number; ready: boolean }> }) => {
+      setLobbyPlayers(data.players);
+      setLobbyMode(data.mode);
+    });
+
     socket.on('error', (data) => {
       setError(data.message);
       addLog(`Error: ${data.message}`);
@@ -153,6 +174,7 @@ export default function App() {
       socket.off('game:end');
       socket.off('player:joined');
       socket.off('player:left');
+      socket.off('lobby:update');
       socket.off('error');
     };
   }, [addLog]);
@@ -161,10 +183,10 @@ export default function App() {
     if (!playerName.trim()) { setError('Enter your name'); return; }
     try {
       await connectSocket();
-      socket.emit('room:create', { name: playerName }, (res: { roomId: string }) => {
+      socket.emit('room:create', { name: playerName, mode }, (res: { roomId: string; mode: '1v1' | '2v2' }) => {
         setRoomId(res.roomId);
         setScreen('hero_select');
-        addLog(`Room created: ${res.roomId}`);
+        addLog(`Room created: ${res.roomId} (${mode})`);
       });
     } catch {
       setError('Failed to connect to server');
@@ -175,8 +197,9 @@ export default function App() {
     if (!playerName.trim() || !joinRoomId.trim()) { setError('Enter name and room ID'); return; }
     try {
       await connectSocket();
-      socket.emit('room:join', { roomId: joinRoomId, name: playerName }, (res: { roomId?: string; error?: string }) => {
+      socket.emit('room:join', { roomId: joinRoomId, name: playerName }, (res: { roomId?: string; error?: string; mode?: '1v1' | '2v2' }) => {
         if (res.error) { setError(res.error); return; }
+        if (res.mode) setLobbyMode(res.mode);
         setRoomId(res.roomId!);
         setScreen('hero_select');
         addLog(`Joined room: ${res.roomId}`);
@@ -190,7 +213,7 @@ export default function App() {
     if (!playerName.trim() || !selectedHero) { setError('Enter name and select a hero'); return; }
     try {
       await connectSocket();
-      socket.emit('room:quickmatch', { name: playerName, heroId: selectedHero }, (res: { roomId: string }) => {
+      socket.emit('room:quickmatch', { name: playerName, heroId: selectedHero, mode }, (res: { roomId: string }) => {
         setRoomId(res.roomId);
         setScreen('battle');
         addLog(`Quick match! Room: ${res.roomId}`);
@@ -238,8 +261,22 @@ export default function App() {
               onChange={e => setPlayerName(e.target.value)}
             />
 
+            <div className="mode-toggle">
+              <button
+                className={`mode-btn ${mode === '1v1' ? 'active' : ''}`}
+                onClick={() => setMode('1v1')}
+              >
+                1v1
+              </button>
+              <button
+                className={`mode-btn ${mode === '2v2' ? 'active' : ''}`}
+                onClick={() => setMode('2v2')}
+              >
+                2v2
+              </button>
+            </div>
             <button className="game-btn game-btn-primary" onClick={handleCreateRoom}>
-              Create Room
+              Create Room ({mode})
             </button>
 
             <div className="divider">
@@ -280,7 +317,7 @@ export default function App() {
               onClick={handleQuickMatch}
               disabled={!selectedHero || !playerName}
             >
-              Find Match
+              Find Match ({mode})
             </button>
           </div>
 
@@ -308,19 +345,71 @@ export default function App() {
 
   // ─── LOBBY ───
   if (screen === 'lobby') {
+    const maxSlots = lobbyMode === '2v2' ? 4 : 2;
+    const team0 = lobbyPlayers.filter(p => p.teamIndex === 0);
+    const team1 = lobbyPlayers.filter(p => p.teamIndex === 1);
+
     return (
       <div className="app-container">
         <div className="lobby-screen">
-          <div className="lobby-icon">
-            <div className="lobby-spinner" />
-          </div>
-          <h2 className="screen-title">Awaiting Challenger</h2>
+          <h2 className="screen-title">Waiting for Players</h2>
           <div className="room-display">
             <span className="room-label">Room Code</span>
             <span className="room-code">{roomId}</span>
           </div>
-          <p className="lobby-hint">Share this code with your opponent</p>
-          <p className="lobby-hero">Playing as <strong>{selectedHero}</strong></p>
+          <p className="lobby-hint">Share this code with {maxSlots === 4 ? 'your teammates and opponents' : 'your opponent'}</p>
+
+          <div className="lobby-teams">
+            <div className="lobby-team team-blue">
+              <div className="lobby-team-label">Team Blue</div>
+              {Array.from({ length: maxSlots / 2 }).map((_, i) => {
+                const p = team0[i];
+                return (
+                  <div key={i} className={`lobby-slot ${p ? 'filled' : 'empty'}`}>
+                    {p ? (
+                      <>
+                        <span className="lobby-slot-name">{p.name}</span>
+                        {p.heroId
+                          ? <span className="lobby-slot-hero">{p.heroId}</span>
+                          : <span className="lobby-slot-picking">picking...</span>
+                        }
+                      </>
+                    ) : (
+                      <span className="lobby-slot-empty">Waiting...</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="lobby-vs">VS</div>
+
+            <div className="lobby-team team-red">
+              <div className="lobby-team-label">Team Red</div>
+              {Array.from({ length: maxSlots / 2 }).map((_, i) => {
+                const p = team1[i];
+                return (
+                  <div key={i} className={`lobby-slot ${p ? 'filled' : 'empty'}`}>
+                    {p ? (
+                      <>
+                        <span className="lobby-slot-name">{p.name}</span>
+                        {p.heroId
+                          ? <span className="lobby-slot-hero">{p.heroId}</span>
+                          : <span className="lobby-slot-picking">picking...</span>
+                        }
+                      </>
+                    ) : (
+                      <span className="lobby-slot-empty">Waiting...</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="lobby-progress">
+            {lobbyPlayers.filter(p => p.ready).length} / {maxSlots} ready
+          </div>
         </div>
         <GameLog logs={logs} />
         <style>{menuStyles}</style>
@@ -405,11 +494,17 @@ export default function App() {
         />
       )}
 
-      {phase === 'action_phase' && !isMyTurn && (
-        <div className="waiting-banner">
-          Waiting for opponent's action...
-        </div>
-      )}
+      {phase === 'action_phase' && !isMyTurn && gameState && (() => {
+        const actorId = gameState.actionOrder[gameState.currentActionIndex];
+        const actorName = actorId
+          ? (gameState.teams.flatMap(t => t.players).find(p => p.id === actorId)?.name ?? 'Opponent')
+          : 'Opponent';
+        return (
+          <div className="waiting-banner">
+            Waiting for {actorName}'s action...
+          </div>
+        );
+      })()}
 
       <GameLog logs={logs} />
 
@@ -422,11 +517,18 @@ const RPS_EMOJI: Record<string, string> = { rock: '✊', paper: '✋', scissors:
 
 function RPSDrawBanner({ choices, myId }: { choices: Record<string, RPSChoice>; myId: string }) {
   const myChoice = choices[myId];
-  const oppChoice = Object.entries(choices).find(([id]) => id !== myId)?.[1];
+  const otherChoices = Object.entries(choices)
+    .filter(([id]) => id !== myId)
+    .map(([, choice]) => choice);
+
   return (
     <div className="rps-draw-banner">
       <div className="rps-draw-emojis">
-        {myChoice && RPS_EMOJI[myChoice]} vs {oppChoice && RPS_EMOJI[oppChoice]}
+        {myChoice && RPS_EMOJI[myChoice]}
+        {otherChoices.length > 0 && ' vs '}
+        {otherChoices.map((c, i) => (
+          <span key={i}>{RPS_EMOJI[c]}</span>
+        ))}
       </div>
       <div className="rps-draw-text">Draw! Pick again</div>
     </div>
@@ -896,5 +998,129 @@ const menuStyles = `
     color: var(--text-dim);
     font-style: italic;
     font-size: 14px;
+  }
+
+  /* ─── Mode Toggle ─── */
+  .mode-toggle {
+    display: flex;
+    gap: 8px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid var(--border-dim);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-size: 13px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mode-btn:hover {
+    border-color: var(--border-bright);
+  }
+
+  .mode-btn.active {
+    border-color: var(--gold);
+    background: linear-gradient(180deg, #f59e0b15, #f59e0b05);
+    color: var(--gold);
+  }
+
+  /* ─── Lobby Teams ─── */
+  .lobby-teams {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .lobby-team {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .lobby-team-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+  }
+
+  .team-blue .lobby-team-label {
+    color: var(--team-blue);
+    background: #3b82f610;
+    border: 1px solid #3b82f630;
+  }
+
+  .team-red .lobby-team-label {
+    color: var(--team-red-light);
+    background: #ef444410;
+    border: 1px solid #ef444430;
+  }
+
+  .lobby-slot {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-dim);
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 52px;
+    justify-content: center;
+  }
+
+  .lobby-slot.filled {
+    border-color: var(--border-base);
+  }
+
+  .lobby-slot-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .lobby-slot-hero {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--gold-light);
+    letter-spacing: 0.5px;
+  }
+
+  .lobby-slot-picking {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  .lobby-slot-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+    text-align: center;
+  }
+
+  .lobby-vs {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--text-dim);
+    align-self: center;
+    padding-top: 28px;
+  }
+
+  .lobby-progress {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
   }
 `;

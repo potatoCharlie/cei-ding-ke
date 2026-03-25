@@ -117,7 +117,7 @@ describe('executeAction', () => {
     expect(hero2.consecutivePunchesReceived).toBe(0); // reset after stun
   });
 
-  it('non-punch action resets opponent punch counter', () => {
+  it('target acting resets their own punch counter (target-based)', () => {
     const state = makeGame();
     setPositions(state, 5, 5);
 
@@ -128,9 +128,14 @@ describe('executeAction', () => {
     executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p2' });
     expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
 
-    // Do stay (non-punch) — resets counter
+    // Attacker does non-punch — does NOT reset target's counter (target-based)
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'stay', playerId: 'p1' });
+    expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(2);
+
+    // Target acts — resets their own counter
+    winRPSForPlayer(state, 'p2');
+    executeAction(state, { type: 'stay', playerId: 'p2' });
     expect(getHero(state, 'p2').consecutivePunchesReceived).toBe(0);
   });
 

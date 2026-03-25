@@ -16,18 +16,15 @@ export interface PlayerExpectation {
 }
 
 export interface TurnScript {
-  /** Who wins RPS this turn */
-  rpsWinner: 'p1' | 'p2';
-  /** Hero action for the RPS winner */
-  action: PlayerAction;
+  /** Who wins RPS this turn (array for multi-winner support) */
+  rpsWinners: string[];
+  /** Hero actions for the RPS winners (one per winner) */
+  actions: PlayerAction[];
   /** Minion action (required if hero has an alive minion) */
   minionAction?: PlayerAction;
   /** Optional assertions after this turn completes */
   expect?: {
-    p1?: PlayerExpectation;
-    p2?: PlayerExpectation;
-    phase?: string;
-    winner?: number | null;
+    [key: string]: PlayerExpectation | string | number | null | undefined;
   };
 }
 
@@ -36,8 +33,10 @@ export interface BattleScript {
   name?: string;
   hero1: string;
   hero2: string;
+  hero3?: string;
+  hero4?: string;
   /** Optional starting positions (default: 1 and 2) */
-  startPositions?: { p1: number; p2: number };
+  startPositions?: Record<string, number>;
   /** Optional initial state mutations (e.g., set HP, apply status) */
   setup?: (state: GameState) => void;
   turns: TurnScript[];
@@ -45,15 +44,14 @@ export interface BattleScript {
 
 export interface BattleLogEntry {
   turn: number;
-  rpsWinner: string;
-  action: PlayerAction;
+  rpsWinners: string[];
+  actions: PlayerAction[];
   minionAction?: PlayerAction;
   heroEffects: GameEffect[];
   minionEffects: GameEffect[];
   startTurnEffects: GameEffect[];
   stateAfter: {
-    p1: { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number };
-    p2: { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number };
+    [key: string]: { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number } | string | number | null;
     phase: string;
     turn: number;
     winner: number | null;
@@ -82,33 +80,40 @@ function getPlayerState(state: GameState, playerId: string) {
   throw new Error(`Player ${playerId} not found`);
 }
 
+function getAllPlayerIds(state: GameState): string[] {
+  const ids: string[] = [];
+  for (const team of state.teams) {
+    for (const p of team.players) {
+      ids.push(p.id);
+    }
+  }
+  return ids;
+}
+
 function snapshotState(state: GameState) {
-  const h1 = getHeroState(state, 'p1');
-  const h2 = getHeroState(state, 'p2');
-  return {
-    p1: {
-      hp: h1.hp,
-      position: h1.position,
-      alive: h1.alive,
-      status: h1.statusEffects.map(e => e.type),
-      invisibleRounds: h1.invisibleRounds,
-    },
-    p2: {
-      hp: h2.hp,
-      position: h2.position,
-      alive: h2.alive,
-      status: h2.statusEffects.map(e => e.type),
-      invisibleRounds: h2.invisibleRounds,
-    },
+  const result: BattleLogEntry['stateAfter'] = {
     phase: state.phase,
     turn: state.turn,
     winner: state.winner,
   };
+
+  for (const id of getAllPlayerIds(state)) {
+    const h = getHeroState(state, id);
+    result[id] = {
+      hp: h.hp,
+      position: h.position,
+      alive: h.alive,
+      status: h.statusEffects.map(e => e.type),
+      invisibleRounds: h.invisibleRounds,
+    };
+  }
+
+  return result;
 }
 
-function winRPS(state: GameState, winnerId: string): void {
+function winRPS(state: GameState, winnerIds: string[]): void {
   state.phase = 'action_phase';
-  state.actionOrder = [winnerId];
+  state.actionOrder = winnerIds;
   state.currentActionIndex = 0;
   state.awaitingMinionAction = false;
 }
@@ -118,15 +123,29 @@ function winRPS(state: GameState, winnerId: string): void {
  * Throws on assertion failures with the full log for debugging.
  */
 export function simulateBattle(script: BattleScript): BattleLog {
-  const state = createGameState(
-    'e2e-test',
-    { id: 'p1', name: 'Player1', heroId: script.hero1 },
-    { id: 'p2', name: 'Player2', heroId: script.hero2 },
-  );
+  let state: GameState;
+
+  if (script.hero3 && script.hero4) {
+    // 2v2 mode
+    state = createGameState('e2e-test', '2v2', [
+      { id: 'p1', name: 'P1', heroId: script.hero1, teamIndex: 0 },
+      { id: 'p2', name: 'P2', heroId: script.hero2, teamIndex: 0 },
+      { id: 'p3', name: 'P3', heroId: script.hero3, teamIndex: 1 },
+      { id: 'p4', name: 'P4', heroId: script.hero4, teamIndex: 1 },
+    ]);
+  } else {
+    // 1v1 mode
+    state = createGameState(
+      'e2e-test',
+      { id: 'p1', name: 'Player1', heroId: script.hero1 },
+      { id: 'p2', name: 'Player2', heroId: script.hero2 },
+    );
+  }
 
   if (script.startPositions) {
-    getHeroState(state, 'p1').position = script.startPositions.p1;
-    getHeroState(state, 'p2').position = script.startPositions.p2;
+    for (const [playerId, pos] of Object.entries(script.startPositions)) {
+      getHeroState(state, playerId).position = pos;
+    }
   }
 
   if (script.setup) {
@@ -151,8 +170,8 @@ export function simulateBattle(script: BattleScript): BattleLog {
       if ((state.phase as string) === 'game_over') {
         log.push({
           turn: state.turn,
-          rpsWinner: turn.rpsWinner,
-          action: turn.action,
+          rpsWinners: turn.rpsWinners,
+          actions: turn.actions,
           heroEffects: [],
           minionEffects: [],
           startTurnEffects,
@@ -162,11 +181,16 @@ export function simulateBattle(script: BattleScript): BattleLog {
       }
     }
 
-    // Set RPS winner
-    winRPS(state, turn.rpsWinner);
+    // Set RPS winners
+    winRPS(state, turn.rpsWinners);
 
-    // Execute hero action
-    const heroEffects = executeAction(state, turn.action);
+    // Execute hero actions (one per winner)
+    const heroEffects: GameEffect[] = [];
+    for (const action of turn.actions) {
+      if ((state.phase as string) === 'game_over') break;
+      const effects = executeAction(state, action);
+      heroEffects.push(...effects);
+    }
 
     // Execute minion action if needed
     let minionEffects: GameEffect[] = [];
@@ -177,8 +201,8 @@ export function simulateBattle(script: BattleScript): BattleLog {
     // Record log entry
     const entry: BattleLogEntry = {
       turn: state.turn <= 1 ? i + 1 : state.turn - ((state.phase as string) === 'game_over' ? 0 : 1),
-      rpsWinner: turn.rpsWinner,
-      action: turn.action,
+      rpsWinners: turn.rpsWinners,
+      actions: turn.actions,
       minionAction: turn.minionAction,
       heroEffects,
       minionEffects,
@@ -204,8 +228,17 @@ function assertTurnExpectations(
 ): void {
   const ctx = () => `Turn ${turnIndex + 1} failed.\nBattle log:\n${formatLog(log)}`;
 
-  if (expect.p1) assertPlayerState('p1', expect.p1, entry.stateAfter.p1, ctx);
-  if (expect.p2) assertPlayerState('p2', expect.p2, entry.stateAfter.p2, ctx);
+  // Check player assertions (p1, p2, p3, p4)
+  for (const key of Object.keys(expect)) {
+    if (key.match(/^p\d+$/)) {
+      const playerExpect = expect[key] as PlayerExpectation;
+      const playerState = entry.stateAfter[key] as { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number } | undefined;
+      if (!playerState) {
+        throw new Error(`Player ${key} not found in state snapshot.\n${ctx()}`);
+      }
+      assertPlayerState(key, playerExpect, playerState, ctx);
+    }
+  }
 
   if (expect.phase !== undefined && entry.stateAfter.phase !== expect.phase) {
     throw new Error(`Expected phase '${expect.phase}', got '${entry.stateAfter.phase}'.\n${ctx()}`);
@@ -218,7 +251,7 @@ function assertTurnExpectations(
 function assertPlayerState(
   playerId: string,
   expected: PlayerExpectation,
-  actual: BattleLogEntry['stateAfter']['p1'],
+  actual: { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number },
   ctx: () => string,
 ): void {
   if (expected.hp !== undefined && actual.hp !== expected.hp) {
@@ -256,9 +289,11 @@ function assertPlayerState(
 export function formatLog(log: BattleLog): string {
   return log.map((entry, i) => {
     const lines = [
-      `--- Turn ${i + 1} (RPS winner: ${entry.rpsWinner}) ---`,
-      `  Action: ${entry.action.type}${entry.action.skillId ? ` (${entry.action.skillId})` : ''}`,
+      `--- Turn ${i + 1} (RPS winners: ${entry.rpsWinners.join(', ')}) ---`,
     ];
+    for (const action of entry.actions) {
+      lines.push(`  Action: ${action.type}${action.skillId ? ` (${action.skillId})` : ''} by ${action.playerId}`);
+    }
     if (entry.minionAction) {
       lines.push(`  Minion: ${entry.minionAction.type}`);
     }
@@ -268,11 +303,14 @@ export function formatLog(log: BattleLog): string {
     if (entry.heroEffects.length > 0) {
       lines.push(`  Effects: ${entry.heroEffects.map(e => e.description).join(', ')}`);
     }
-    lines.push(
-      `  P1: HP=${entry.stateAfter.p1.hp} pos=${entry.stateAfter.p1.position} alive=${entry.stateAfter.p1.alive} status=[${entry.stateAfter.p1.status.join(',')}]`,
-      `  P2: HP=${entry.stateAfter.p2.hp} pos=${entry.stateAfter.p2.position} alive=${entry.stateAfter.p2.alive} status=[${entry.stateAfter.p2.status.join(',')}]`,
-      `  Phase: ${entry.stateAfter.phase} | Winner: ${entry.stateAfter.winner}`,
-    );
+    // Print all player states
+    for (const key of Object.keys(entry.stateAfter)) {
+      if (key.match(/^p\d+$/)) {
+        const ps = entry.stateAfter[key] as { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number };
+        lines.push(`  ${key.toUpperCase()}: HP=${ps.hp} pos=${ps.position} alive=${ps.alive} status=[${ps.status.join(',')}]`);
+      }
+    }
+    lines.push(`  Phase: ${entry.stateAfter.phase} | Winner: ${entry.stateAfter.winner}`);
     return lines.join('\n');
   }).join('\n');
 }
@@ -377,8 +415,8 @@ export function simulateRandomMatch(
       if ((state.phase as string) === 'game_over') {
         log.push({
           turn: turn + 1,
-          rpsWinner: 'n/a',
-          action: { type: 'stay', playerId: 'n/a' },
+          rpsWinners: ['n/a'],
+          actions: [{ type: 'stay', playerId: 'n/a' }],
           heroEffects: [],
           minionEffects: [],
           startTurnEffects,
@@ -397,7 +435,7 @@ export function simulateRandomMatch(
     if (winner === 'p1' && !h1.alive) actualWinner = 'p2';
     if (winner === 'p2' && !h2.alive) actualWinner = 'p1';
 
-    winRPS(state, actualWinner);
+    winRPS(state, [actualWinner]);
 
     // Pick random hero action
     const heroAction = pickRandomAction(state, actualWinner);
@@ -420,10 +458,133 @@ export function simulateRandomMatch(
 
     log.push({
       turn: turn + 1,
-      rpsWinner: actualWinner,
-      action: heroAction,
+      rpsWinners: [actualWinner],
+      actions: [heroAction],
       minionAction,
       heroEffects,
+      minionEffects,
+      startTurnEffects,
+      stateAfter: snapshotState(state),
+    });
+
+    // Check invariants
+    const violations = checkInvariants(state);
+    if (violations.length > 0) {
+      allViolations.push(...violations.map(v => `Turn ${turn + 1}: ${v}`));
+    }
+  }
+
+  return { state, log, violations: allViolations };
+}
+
+/**
+ * Simulate a random 2v2 match. Returns { state, log, violations }.
+ */
+export function simulateRandomMatch2v2(
+  team0Heroes: string[],
+  team1Heroes: string[],
+  maxTurns: number,
+): { state: GameState; log: BattleLog; violations: string[] } {
+  const state = createGameState('fuzz-test', '2v2', [
+    { id: 'p1', name: 'Player1', heroId: team0Heroes[0], teamIndex: 0 },
+    { id: 'p2', name: 'Player2', heroId: team0Heroes[1], teamIndex: 0 },
+    { id: 'p3', name: 'Player3', heroId: team1Heroes[0], teamIndex: 1 },
+    { id: 'p4', name: 'Player4', heroId: team1Heroes[1], teamIndex: 1 },
+  ]);
+
+  const log: BattleLog = [];
+  const allViolations: string[] = [];
+  const playerIds = ['p1', 'p2', 'p3', 'p4'];
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    if (state.phase === 'game_over') break;
+
+    // Tick status effects
+    let startTurnEffects: GameEffect[] = [];
+    if (state.turn > 1) {
+      startTurnEffects = startTurn(state);
+      if ((state.phase as string) === 'game_over') {
+        log.push({
+          turn: turn + 1,
+          rpsWinners: ['n/a'],
+          actions: [{ type: 'stay', playerId: 'n/a' }],
+          heroEffects: [],
+          minionEffects: [],
+          startTurnEffects,
+          stateAfter: snapshotState(state),
+        });
+        break;
+      }
+    }
+
+    // Randomly pick 1-2 winners from alive, non-stunned players
+    const eligible = playerIds.filter(id => {
+      const hero = getHeroState(state, id);
+      return hero.alive && !isStunned(hero);
+    });
+
+    if (eligible.length === 0) {
+      // All alive players are stunned — just advance turn with no actions
+      winRPS(state, [playerIds.find(id => getHeroState(state, id).alive) ?? 'p1']);
+      const stayAction: PlayerAction = { type: 'stay', playerId: state.actionOrder[0] };
+      executeAction(state, stayAction);
+      log.push({
+        turn: turn + 1,
+        rpsWinners: state.actionOrder,
+        actions: [stayAction],
+        heroEffects: [],
+        minionEffects: [],
+        startTurnEffects,
+        stateAfter: snapshotState(state),
+      });
+      continue;
+    }
+
+    // Randomly pick 1 or 2 winners from eligible players (from different teams preferably)
+    const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+    const numWinners = Math.random() < 0.5 ? 1 : Math.min(2, shuffled.length);
+    const winners = shuffled.slice(0, numWinners);
+
+    winRPS(state, winners);
+
+    // Execute actions for each winner
+    const allHeroEffects: GameEffect[] = [];
+    const allActions: PlayerAction[] = [];
+    let minionAction: PlayerAction | undefined;
+    let minionEffects: GameEffect[] = [];
+
+    for (const winnerId of winners) {
+      if ((state.phase as string) === 'game_over') break;
+
+      // Skip if this winner died during this round
+      const hero = getHeroState(state, winnerId);
+      if (!hero.alive) continue;
+
+      const heroAction = pickRandomAction(state, winnerId);
+      if (!heroAction) {
+        const stayAction: PlayerAction = { type: 'stay', playerId: winnerId };
+        executeAction(state, stayAction);
+        allActions.push(stayAction);
+        continue;
+      }
+
+      const effects = executeAction(state, heroAction);
+      allHeroEffects.push(...effects);
+      allActions.push(heroAction);
+
+      // Handle minion action if needed
+      if (state.awaitingMinionAction) {
+        minionAction = pickRandomAction(state, winnerId) ?? { type: 'stay', playerId: winnerId };
+        minionEffects = executeAction(state, minionAction);
+      }
+    }
+
+    log.push({
+      turn: turn + 1,
+      rpsWinners: winners,
+      actions: allActions,
+      minionAction,
+      heroEffects: allHeroEffects,
       minionEffects,
       startTurnEffects,
       stateAfter: snapshotState(state),

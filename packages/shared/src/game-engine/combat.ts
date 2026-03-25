@@ -96,6 +96,15 @@ export function executeSkill(
     return executeKuangSelfCast(state, casterId, skillId);
   }
 
+  // Kuang teammate heal: same as self-heal (40 HP), no self-damage
+  if (skill.special?.includes('kuang_self_heal') && targetId !== casterId) {
+    const casterTeamIndex = getTeamIndex(state, casterId);
+    const targetTeamIndex = getTeamIndex(state, targetId!);
+    if (casterTeamIndex === targetTeamIndex) {
+      return executeKuangTeammateHeal(state, casterId, targetId!);
+    }
+  }
+
   // Find target
   const target = targetId
     ? findHeroByPlayerId(state, targetId)
@@ -187,6 +196,16 @@ function executeKuangSelfCast(state: GameState, casterId: string, skillId: strin
     targetId: casterId,
     value: 40,
     description: `${casterId} uses Kuang on self, healing 40 HP!`,
+  }];
+}
+
+function executeKuangTeammateHeal(state: GameState, casterId: string, targetId: string): GameEffect[] {
+  return [{
+    type: 'heal',
+    sourceId: casterId,
+    targetId: targetId,
+    value: 40,
+    description: `${casterId} uses Kuang on teammate ${targetId}, healing 40 HP!`,
   }];
 }
 

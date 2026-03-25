@@ -44,11 +44,25 @@ export interface PlayerStats {
   rpsWins: number;
 }
 
+export interface LobbyPlayerData {
+  id: string;
+  name: string;
+  heroId: string;   // empty string if not yet selected
+  teamIndex: number;
+  ready: boolean;
+}
+
+export interface LobbyUpdateData {
+  mode: '1v1' | '2v2';
+  players: LobbyPlayerData[];
+}
+
 export interface ServerEvents {
   'game:state': (state: GameState) => void;
   'game:phase': (data: GamePhaseData) => void;
   'rps:result': (data: RPSResultData) => void;
-  'rps:waiting': (data: { submitted: string[] }) => void;
+  'rps:waiting': (data: { submitted: string[]; total: number }) => void;
+  'lobby:update': (data: LobbyUpdateData) => void;
   'action:result': (data: ActionResultData) => void;
   'action:request': (data: { playerId: string; timeLimit: number }) => void;
   'turn:end': (data: { turnNumber: number }) => void;

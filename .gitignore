@@ -8,3 +8,4 @@ dist/
 .env.*
 .claude/
 game-plan.*
+.worktrees/
