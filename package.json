@@ -15,7 +15,8 @@
     "dev:server": "npm run dev --workspace=@cei-ding-ke/server",
     "dev:client": "npm run dev --workspace=@cei-ding-ke/client",
     "build:shared": "npm run build --workspace=@cei-ding-ke/shared",
-    "test": "npm run test --workspace=@cei-ding-ke/shared"
+    "test": "npm run test --workspace=@cei-ding-ke/shared",
+    "test:deep": "FUZZER_TIER=deep npm run test --workspace=@cei-ding-ke/shared"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
