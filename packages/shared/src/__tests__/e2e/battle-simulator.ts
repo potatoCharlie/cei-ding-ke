@@ -9,6 +9,8 @@ import { isStunned } from '../../game-engine/status-effects.js';
 export interface PlayerExpectation {
   hp?: number;
   position?: number;
+  positionStart?: number;
+  positionEnd?: number;
   alive?: boolean;
   stunned?: boolean;
   trapped?: boolean;
@@ -50,6 +52,7 @@ export interface BattleLogEntry {
   heroEffects: GameEffect[];
   minionEffects: GameEffect[];
   startTurnEffects: GameEffect[];
+  turnStartPositions: Record<string, number>;
   stateAfter: {
     [key: string]: { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number } | string | number | null;
     phase: string;
@@ -171,6 +174,7 @@ export function simulateBattle(script: BattleScript): BattleLog {
   if (script.startPositions) {
     for (const [playerId, pos] of Object.entries(script.startPositions)) {
       getHeroState(state, playerId).position = pos;
+      state.positionsAtTurnStart[playerId] = pos;
     }
   }
 
@@ -188,6 +192,8 @@ export function simulateBattle(script: BattleScript): BattleLog {
       break;
     }
 
+    const turnStartPositions = { ...state.positionsAtTurnStart };
+
     // Tick status effects (mirrors server's beginRPSPhase behavior)
     let startTurnEffects: GameEffect[] = [];
     if (state.turn > 1) {
@@ -201,6 +207,7 @@ export function simulateBattle(script: BattleScript): BattleLog {
           heroEffects: [],
           minionEffects: [],
           startTurnEffects,
+          turnStartPositions,
           stateAfter: snapshotState(state),
         });
         break;
@@ -233,6 +240,7 @@ export function simulateBattle(script: BattleScript): BattleLog {
       heroEffects,
       minionEffects,
       startTurnEffects,
+      turnStartPositions,
       stateAfter: snapshotState(state),
     };
     log.push(entry);
@@ -262,7 +270,7 @@ function assertTurnExpectations(
       if (!playerState) {
         throw new Error(`Player ${key} not found in state snapshot.\n${ctx()}`);
       }
-      assertPlayerState(key, playerExpect, playerState, ctx);
+      assertPlayerState(key, playerExpect, entry.turnStartPositions[key], playerState, ctx);
     }
   }
 
@@ -277,9 +285,16 @@ function assertTurnExpectations(
 function assertPlayerState(
   playerId: string,
   expected: PlayerExpectation,
+  actualStartPosition: number | undefined,
   actual: { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number },
   ctx: () => string,
 ): void {
+  if (expected.positionStart !== undefined && actualStartPosition !== expected.positionStart) {
+    throw new Error(`${playerId} start position: expected ${expected.positionStart}, got ${actualStartPosition}.\n${ctx()}`);
+  }
+  if (expected.positionEnd !== undefined && actual.position !== expected.positionEnd) {
+    throw new Error(`${playerId} end position: expected ${expected.positionEnd}, got ${actual.position}.\n${ctx()}`);
+  }
   if (expected.hp !== undefined && actual.hp !== expected.hp) {
     throw new Error(`${playerId} HP: expected ${expected.hp}, got ${actual.hp}.\n${ctx()}`);
   }
@@ -333,7 +348,7 @@ export function formatLog(log: BattleLog): string {
     for (const key of Object.keys(entry.stateAfter)) {
       if (key.match(/^p\d+$/)) {
         const ps = entry.stateAfter[key] as { hp: number; position: number; alive: boolean; status: string[]; invisibleRounds: number };
-        lines.push(`  ${key.toUpperCase()}: HP=${ps.hp} pos=${ps.position} alive=${ps.alive} status=[${ps.status.join(',')}]`);
+        lines.push(`  ${key.toUpperCase()}: startPos=${entry.turnStartPositions[key]} endPos=${ps.position} HP=${ps.hp} alive=${ps.alive} status=[${ps.status.join(',')}]`);
       }
     }
     lines.push(`  Phase: ${entry.stateAfter.phase} | Winner: ${entry.stateAfter.winner}`);

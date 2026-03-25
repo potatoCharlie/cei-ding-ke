@@ -15,7 +15,7 @@ import type { BattleScript, TurnScript, PlayerExpectation } from './battle-simul
  *
  *   turn 1: p1 wins
  *     p1 punch p2
- *     > p1: hp=100
+ *     > p1: hp=100 posStart=5 posEnd=6
  *     > p2: hp=90 stunned=false
  *     > phase=rps_submit winner=null
  *
@@ -23,7 +23,7 @@ import type { BattleScript, TurnScript, PlayerExpectation } from './battle-simul
  *     p1 skill small_dart p3
  *     p2 punch p4
  *     minion hellfire_p1 punch p3
- *     > p3: hp=80 trapped=true
+ *     > p3: hp=80 trapped=true posStart=5 posEnd=5
  */
 export function parseScriptFile(content: string): BattleScript[] {
   const scripts: BattleScript[] = [];
@@ -99,7 +99,7 @@ function parseScenario(text: string): BattleScript | null {
       continue;
     }
 
-    // setup p1: hp=50 stunned=2 posStart=5
+    // setup p1: hp=50 stunned=2
     const setupMatch = line.match(/^setup\s+(p[1-4]):\s*(.+)$/);
     if (setupMatch) {
       const playerId = setupMatch[1];
@@ -218,9 +218,6 @@ function parseScenario(text: string): BattleScript | null {
         if (props.trapped !== undefined) {
           hero.statusEffects.push({ type: 'trapped', remainingRounds: parseInt(props.trapped as string) });
         }
-        if (props.posStart !== undefined) {
-          state.positionsAtTurnStart[playerId] = parseInt(props.posStart as string);
-        }
       }
     };
   }
@@ -298,6 +295,8 @@ function parsePlayerExpectation(str: string): PlayerExpectation {
 
   if (props.hp !== undefined) expect.hp = parseInt(props.hp);
   if (props.pos !== undefined) expect.position = parseInt(props.pos);
+  if (props.posStart !== undefined) expect.positionStart = parseInt(props.posStart);
+  if (props.posEnd !== undefined) expect.positionEnd = parseInt(props.posEnd);
   if (props.alive !== undefined) expect.alive = props.alive === 'true';
   if (props.stunned !== undefined) expect.stunned = props.stunned === 'true';
   if (props.trapped !== undefined) expect.trapped = props.trapped === 'true';

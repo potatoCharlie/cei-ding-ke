@@ -38,7 +38,7 @@ pos: 5 5
 
 turn 1: p1 wins
   p1 skill magic_burn p2
-  > p2: hp=85 stunned=true
+  > p2: hp=75 stunned=true
 
 === Big Darts: 25 physical damage + self-stun
 # Use shan vs shan to avoid Nan's stink aura interfering.
