@@ -6,6 +6,8 @@ dist/
 *.local
 .env
 .env.*
-.claude/
+.claude/*
+!.claude/skills/
 game-plan.*
 .worktrees/
+.superpowers/
