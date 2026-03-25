@@ -23,12 +23,11 @@ turn 1: p1 wins
   > p2: hp=95 stunned=true
 
 turn 2: p1 wins
-  # startTurn ticks stun off, stun immunity this turn
+  # startTurn ticks the old stun, then Small Dart reapplies it
   p1 skill small_dart p2
-  > p2: hp=90 stunned=false
+  > p2: hp=90 stunned=true
 
 turn 3: p1 wins
-  # No stun immunity now
   p1 skill small_dart p2
   > p2: hp=85 stunned=true
 

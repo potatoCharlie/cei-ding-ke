@@ -19,6 +19,7 @@ Extract:
 - Base HP and `maxHp`
 - Each skill: `id`, damage value, damage type (physical/magic), valid distance range (`minDistance`/`maxDistance`), status effect applied (type + `remainingRounds`), `maxUses` (0 = unlimited)
 - Passive: name, trigger condition, effect description
+- Special mechanics from `special`, summon definitions, ally/self targeting, and hero runtime state changes
 
 ### Step 2 — Read DSL syntax from examples
 
@@ -31,6 +32,7 @@ DSL rules (derive from examples, never guess):
 - `setup p1|p2|p3|p4: key=val` — mutate initial state (e.g., `hp=50`)
 - `turn N: p1 wins` or `turn N: p1 p2 win` (2v2 multi-winner)
 - Action lines: `p1 punch p2`, `p1 skill <skillId> [target]`, `p1 move_forward`, `p1 move_backward`, `p1 stay`, `p1 summon`
+- Minion actions: `minion <minionId> punch <target>`
 - Assertion lines: `> p1: hp=80 stunned=true`, `> phase=game_over winner=0`
 
 ### Step 3 — Generate the scenario file
@@ -45,6 +47,9 @@ Generate these scenarios for each hero:
 | Each skill — status effect (if any) | Assert correct status field after use (e.g., `stunned=true`, `trapped=2`) |
 | Each skill — use limit (if `maxUses > 0`) | Use skill `maxUses` times in separate turns — assert skill is unavailable on the next attempt (skip step if `maxUses === 0`) |
 | Passive | Set up trigger condition from passive definition, verify effect fires (HP change, status, etc.) |
+| Ally/self targeting (if applicable) | Cover self-cast or teammate-targeted buffs/heals |
+| Summon interactions (if applicable) | Cover summon creation, summon action, and summon immunity/targeting rules |
+| Multi-round status duration (if applicable) | Cover at least one follow-up turn proving duration behavior |
 
 Use a simple opponent from the existing pool (`nan` or `shan`) for all scenarios to isolate the new hero's behaviour. Set positions so the skill's range condition is satisfied without extra movement turns.
 

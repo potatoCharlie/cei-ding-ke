@@ -48,6 +48,34 @@ export function findOpponentHero(state: GameState, playerId: string): HeroState 
   return oppTeam.players.find(p => p.hero.alive)?.hero;
 }
 
+export function findPlayerByMinionId(state: GameState, minionId: string): PlayerState | undefined {
+  for (const team of state.teams) {
+    for (const player of team.players) {
+      if (player.minions.some(minion => minion.minionId === minionId)) return player;
+    }
+  }
+  return undefined;
+}
+
+export function findMinionById(state: GameState, minionId?: string): MinionState | undefined {
+  if (!minionId) return undefined;
+  for (const team of state.teams) {
+    for (const player of team.players) {
+      const minion = player.minions.find(m => m.minionId === minionId);
+      if (minion) return minion;
+    }
+  }
+  return undefined;
+}
+
+export function findEntityPosition(state: GameState, entityId: string): number | undefined {
+  const hero = findHeroByPlayerId(state, entityId);
+  if (hero?.alive) return hero.position;
+  const minion = findMinionById(state, entityId);
+  if (minion?.alive) return minion.position;
+  return undefined;
+}
+
 /**
  * Collect all alive entity positions in the game.
  * Returns array of { id, position } for heroes and minions.

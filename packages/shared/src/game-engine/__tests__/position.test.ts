@@ -65,6 +65,14 @@ describe('getAllEntityPositions', () => {
       position: 1,
       type: 'hellfire',
       consecutivePunchesDealt: 0,
+      name: 'Hellfire',
+      punchDamage: 20,
+      punchCountsForStun: false,
+      immuneTo: ['magic'],
+      moveSpeed: 1,
+      canMove: true,
+      attackMinDistance: 0,
+      attackMaxDistance: 0,
     });
     const positions = getAllEntityPositions(state);
     expect(positions).toHaveLength(3);
@@ -104,6 +112,14 @@ describe('isMoveLegal', () => {
       position: 0,
       type: 'hellfire',
       consecutivePunchesDealt: 0,
+      name: 'Hellfire',
+      punchDamage: 20,
+      punchCountsForStun: false,
+      immuneTo: ['magic'],
+      moveSpeed: 1,
+      canMove: true,
+      attackMinDistance: 0,
+      attackMaxDistance: 0,
     });
     // Moving p2 to position 4 is distance 4 from hellfire at 0 — blocked
     expect(isMoveLegal(state, 'p2', 4)).toBe(false);

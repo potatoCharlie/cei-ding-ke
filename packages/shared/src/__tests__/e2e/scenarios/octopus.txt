@@ -1,0 +1,65 @@
+=== octopus: eat legs disables movement after 8 uses
+heroes: octopus vs shan
+pos: 5 5
+setup p1: hp=20
+
+turn 1: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=25
+
+turn 2: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=30
+
+turn 3: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=35
+
+turn 4: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=40
+
+turn 5: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=45
+
+turn 6: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=50
+
+turn 7: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=55
+
+turn 8: p1 wins
+  p1 skill eat_legs p1
+  > p1: hp=60
+
+turn 9: p1 wins
+  p1 stay
+  > p1: pos=5
+
+=== octopus: build tower attack at range 1
+heroes: octopus vs shan
+pos: 5 6
+
+turn 1: p1 wins
+  p1 skill build_tower p1
+  minion tower_p1 stay
+
+turn 2: p1 wins
+  p1 stay
+  minion tower_p1 punch p2
+  > p2: hp=75
+
+=== octopus: magic burn does not damage tower
+heroes: octopus vs nan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill build_tower p1
+  minion tower_p1 stay
+
+turn 2: p2 wins
+  p2 skill magic_burn tower_p1
+  > p1: hp=60

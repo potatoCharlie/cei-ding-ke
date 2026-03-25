@@ -256,7 +256,7 @@ describe('executeAction', () => {
     expect(getHero(state, 'p2').hp).toBe(85); // 100 - 15
   });
 
-  it('stun breaks on active hero damage', () => {
+  it('stun persists through active hero damage', () => {
     const state = makeGame();
     setPositions(state, 5, 5);
     getHero(state, 'p2').statusEffects.push({ type: 'stunned', remainingRounds: 2 });
@@ -264,8 +264,8 @@ describe('executeAction', () => {
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p2' });
 
-    // Stun should be removed because active punch damage breaks it
-    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+    const stun = getHero(state, 'p2').statusEffects.find(e => e.type === 'stunned');
+    expect(stun?.remainingRounds).toBe(2);
   });
 
   it('stun does NOT break on passive damage (end-of-turn stink)', () => {
@@ -344,6 +344,8 @@ describe('getAvailableActions', () => {
     getPlayer(state, 'p1').minions.push({
       minionId: 'hellfire_p1', ownerId: 'p1', hp: 100, maxHp: 100,
       alive: true, position: 1, type: 'hellfire', consecutivePunchesDealt: 0,
+      name: 'Hellfire', punchDamage: 20, punchCountsForStun: false, immuneTo: ['magic'],
+      moveSpeed: 1, canMove: true, attackMinDistance: 0, attackMaxDistance: 0,
     });
     const actions = getAvailableActions(state, 'p1');
     expect(actions.some(a => a.type === 'summon')).toBe(false);
@@ -363,6 +365,8 @@ describe('getAvailableActions', () => {
     getPlayer(state, 'p1').minions.push({
       minionId: 'hellfire_p1', ownerId: 'p1', hp: 100, maxHp: 100,
       alive: true, position: 1, type: 'hellfire', consecutivePunchesDealt: 0,
+      name: 'Hellfire', punchDamage: 20, punchCountsForStun: false, immuneTo: ['magic'],
+      moveSpeed: 1, canMove: true, attackMinDistance: 0, attackMaxDistance: 0,
     });
     const actions = getAvailableActions(state, 'p1');
     expect(actions.every(a => a.minionId === 'hellfire_p1')).toBe(true);

@@ -37,6 +37,34 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     glowColor: '#93c5fd',
     label: 'Jin',
   },
+  mu: {
+    color: '#14b8a6',
+    bgGradient: 'linear-gradient(135deg, #115e59, #2dd4bf)',
+    emoji: '🎯',
+    glowColor: '#99f6e4',
+    label: 'Mu',
+  },
+  hans: {
+    color: '#b45309',
+    bgGradient: 'linear-gradient(135deg, #78350f, #f59e0b)',
+    emoji: '🐂',
+    glowColor: '#fcd34d',
+    label: 'Hans',
+  },
+  octopus: {
+    color: '#0f766e',
+    bgGradient: 'linear-gradient(135deg, #164e63, #14b8a6)',
+    emoji: '🐙',
+    glowColor: '#67e8f9',
+    label: 'Octopus',
+  },
+  fan: {
+    color: '#db2777',
+    bgGradient: 'linear-gradient(135deg, #831843, #f472b6)',
+    emoji: '🔥',
+    glowColor: '#f9a8d4',
+    label: 'Fan',
+  },
 };
 
 export function getHeroVisual(heroId: string): HeroVisualConfig {

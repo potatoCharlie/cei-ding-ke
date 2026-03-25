@@ -1,0 +1,23 @@
+=== fan: heart fire buffs self
+heroes: fan vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill heart_fire p1
+  > p1: hp=100
+
+turn 2: p1 wins
+  p1 punch p2
+  > p2: hp=85
+
+=== fan: heart fire buffs ally in 2v2
+heroes: fan nan vs shan jin
+pos: 5 5 5 5
+
+turn 1: p1 wins
+  p1 skill heart_fire p2
+  > p2: hp=100
+
+turn 2: p2 wins
+  p2 skill call_fly p3
+  > p3: hp=70

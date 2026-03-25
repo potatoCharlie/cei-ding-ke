@@ -47,6 +47,12 @@ export interface HeroState {
   alive: boolean;
   /** Wind Walk specific: remaining invisible rounds */
   invisibleRounds: number;
+  /** Permanent outgoing damage bonus from buffs like Heart Fire */
+  damageBonus: number;
+  /** Octopus tracks self-heal leg uses */
+  legsEaten: number;
+  /** Some hero-specific mechanics disable movement without trapping */
+  movementDisabled: boolean;
 }
 
 export interface MinionState {
@@ -61,6 +67,14 @@ export interface MinionState {
   type: string;
   /** Track consecutive punches dealt by this minion */
   consecutivePunchesDealt: number;
+  name: string;
+  punchDamage: number;
+  punchCountsForStun: boolean;
+  immuneTo: DamageType[];
+  moveSpeed: number;
+  canMove: boolean;
+  attackMinDistance: number;
+  attackMaxDistance: number;
 }
 
 export interface TeamState {

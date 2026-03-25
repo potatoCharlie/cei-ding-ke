@@ -17,9 +17,9 @@ turn 1: p1 wins
   > p2: hp=75 stunned=true
 
 turn 2: p1 wins
-  # stun ticks off at startTurn, then magic_burn 15 and stink aura 10 at endTurn
+  # stun ticks off at startTurn, then magic_burn reapplies stun and stink aura still hits
   p1 skill magic_burn p2
-  > p2: hp=50 stunned=false
+  > p2: hp=50 stunned=true
 
 === nan: magic burn max uses exhausted after 2 casts
 # magic_burn has maxUses=2. Stink aura deals 10 at endTurn while both remain together.
@@ -31,9 +31,9 @@ turn 1: p1 wins
   > p2: hp=75 stunned=true
 
 turn 2: p1 wins
-  # stun ticks off at startTurn, then magic_burn 15 and stink aura 10 at endTurn
+  # stun ticks off at startTurn, then magic_burn reapplies stun and stink aura still hits
   p1 skill magic_burn p2
-  > p2: hp=50 stunned=false
+  > p2: hp=50 stunned=true
 
 turn 3: p1 wins
   # magic_burn exhausted, punch 10, then stink aura 10 at endTurn

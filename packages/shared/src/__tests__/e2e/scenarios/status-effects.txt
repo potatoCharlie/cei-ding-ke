@@ -1,8 +1,5 @@
-=== Stun-lock prevention: Jin Small Dart cannot infinite stun
+=== Stun duration: Jin Small Dart can reapply stun on later turns
 # Small Dart: 5 dmg + stun 1 round.
-# Turn 1: target not stunned → stun applies normally.
-# Turn 2: startTurn ticks stun off but marks stunImmuneThisTurn.
-#          Second Small Dart blocked by immunity → no stun.
 heroes: jin vs shan
 pos: 5 5
 
@@ -12,10 +9,10 @@ turn 1: p1 wins
 
 turn 2: p1 wins
   p1 skill small_dart p2
-  > p2: hp=90 stunned=false
+  > p2: hp=90 stunned=true
 
 turn 3: p2 wins
-  # p2 is NOT stunned, can act normally
+  # previous 1-round stun ticks off at start of the turn, so p2 can act
   p2 punch p1
   > p1: hp=90
 
@@ -39,12 +36,12 @@ turn 3: p1 wins
   p1 stay
   > p2: hp=70 trapped=false
 
-=== Stun-break on active damage: already-stunned hero wakes from punch
-# Pre-stun p2 with 2 rounds. p1 punches → damage breaks stun.
+=== Stun persists through active damage
+# Pre-stun p2 with 2 rounds. p1 punches → damage does not break stun.
 heroes: shan vs nan
 pos: 5 5
 setup p2: stunned=2
 
 turn 1: p1 wins
   p1 punch p2
-  > p2: hp=90 stunned=false
+  > p2: hp=90 stunned=true

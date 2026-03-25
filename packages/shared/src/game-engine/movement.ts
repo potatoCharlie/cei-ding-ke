@@ -14,7 +14,7 @@ export function getMoveSpeed(hero: HeroState): number {
  * Check if a hero can move (not trapped).
  */
 export function canMove(hero: HeroState): boolean {
-  return !hero.statusEffects.some(e => e.type === 'trapped');
+  return !hero.movementDisabled && !hero.statusEffects.some(e => e.type === 'trapped');
 }
 
 /**

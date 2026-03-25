@@ -1,0 +1,32 @@
+=== hans: stomp stuns adjacent enemy
+heroes: hans vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill stomp p1
+  > p2: hp=100 stunned=true
+
+=== hans: storm hammer true 2-round stun
+heroes: hans vs shan
+pos: 5 5
+
+turn 1: p1 wins
+  p1 skill storm_hammer p2
+  > p2: hp=80 stunned=true
+
+turn 2: p1 wins
+  p1 stay
+  > p2: hp=80 stunned=true
+
+turn 3: p1 wins
+  p1 stay
+  > p2: hp=80 stunned=false
+
+=== hans: stomp hits both enemies in 2v2
+heroes: hans fan vs shan nan
+pos: 5 5 5 5
+
+turn 1: p1 wins
+  p1 skill stomp p1
+  > p3: stunned=true
+  > p4: stunned=true

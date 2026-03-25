@@ -16,18 +16,18 @@ describe('Multi-turn scenarios', () => {
     expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
   });
 
-  it('stun-break sequence: stunned hero wakes when punched', () => {
+  it('stunned hero remains stunned when punched', () => {
     const state = makeGame();
     setPositions(state, 5, 5);
 
     // Stun p2
     getHero(state, 'p2').statusEffects.push({ type: 'stunned', remainingRounds: 3 });
 
-    // p1 punches p2 → stun breaks
+    // p1 punches p2 → stun remains
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p2' });
 
-    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
     expect(getHero(state, 'p2').hp).toBe(90);
   });
 

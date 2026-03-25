@@ -42,6 +42,12 @@ export interface MinionDefinition {
   immuneTo: DamageType[];
   /** Movement per round */
   moveSpeed: number;
+  /** Whether the summon can move at all */
+  canMove?: boolean;
+  /** Minimum attack distance */
+  attackMinDistance?: number;
+  /** Maximum attack distance */
+  attackMaxDistance?: number;
 }
 
 export interface HeroDefinition {

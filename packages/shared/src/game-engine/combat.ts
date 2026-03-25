@@ -1,8 +1,7 @@
 import { PUNCH_DAMAGE } from '../constants.js';
 import type { GameState, GameEffect, HeroState, PlayerAction } from '../types/game.js';
-import type { SkillDefinition } from '../types/hero.js';
 import { getHero } from '../heroes/registry.js';
-import { getDistance, getTeamIndex, findHeroByPlayerId, findOpponentHero } from './position.js';
+import { getDistance, getTeamIndex, findHeroByPlayerId, findOpponentHero, findMinionById, findPlayerByMinionId } from './position.js';
 
 /**
  * Execute a punch action. Can only punch at distance 0.
@@ -13,27 +12,28 @@ export function executePunch(
   targetId?: string,
 ): GameEffect[] {
   const attacker = findHeroByPlayerId(state, attackerId);
-  const defender = targetId ? findHeroByPlayerId(state, targetId) : findOpponentHero(state, attackerId);
-  if (!attacker || !defender || !defender.alive) return [];
+  const defenderHero = targetId ? findHeroByPlayerId(state, targetId) : findOpponentHero(state, attackerId);
+  const defenderMinion = targetId ? findMinionById(state, targetId) : undefined;
+  if (!attacker) return [];
 
-  if (getDistance(attacker.position, defender.position) !== 0) return [];
+  const targetPosition = defenderHero?.alive ? defenderHero.position : defenderMinion?.alive ? defenderMinion.position : undefined;
+  if (targetPosition == null) return [];
+
+  if (getDistance(attacker.position, targetPosition) !== 0) return [];
 
   // Can't punch invisible target
-  if (defender.invisibleRounds > 0) return [];
+  if (defenderHero?.invisibleRounds && defenderHero.invisibleRounds > 0) return [];
 
-  const effects: GameEffect[] = [];
+  const damage = PUNCH_DAMAGE + attacker.damageBonus;
 
-  effects.push({
+  return [{
     type: 'damage',
     sourceId: attackerId,
-    targetId: getPlayerId(state, defender),
-    value: PUNCH_DAMAGE,
+    targetId: defenderHero ? getPlayerId(state, defenderHero) : defenderMinion!.minionId,
+    value: damage,
     damageType: 'physical',
-    description: `${attackerId} throws a punch for ${PUNCH_DAMAGE} physical damage`,
-  });
-
-  // 3-punch stun is tracked and applied in GameState.applyEffects
-  return effects;
+    description: `${attackerId} throws a punch for ${damage} physical damage`,
+  }];
 }
 
 /**
@@ -50,19 +50,16 @@ export function executeWindWalkPunch(
 
   if (getDistance(attacker.position, defender.position) !== 0) return [];
 
-  const effects: GameEffect[] = [];
+  const damage = 15 + attacker.damageBonus;
 
-  effects.push({
+  return [{
     type: 'damage',
     sourceId: attackerId,
     targetId: getPlayerId(state, defender),
-    value: 15,
+    value: damage,
     damageType: 'physical',
-    description: `${attackerId} exits Wind Walk with a powerful punch for 15 physical damage!`,
-  });
-
-  // 3-punch stun is tracked and applied in GameState.applyEffects
-  return effects;
+    description: `${attackerId} exits Wind Walk with a powerful punch for ${damage} physical damage!`,
+  }];
 }
 
 /**
@@ -92,6 +89,22 @@ export function executeSkill(
     return executeWindWalk(state, casterId);
   }
 
+  if (skill.special?.includes('stomp_aoe')) {
+    return executeStomp(state, casterId, skill);
+  }
+
+  if (skill.special?.includes('heart_fire_buff')) {
+    return executeHeartFire(state, casterId, targetId ?? casterId, skill);
+  }
+
+  if (skill.special?.includes('eat_legs')) {
+    return executeEatLegs(state, casterId, skill);
+  }
+
+  if (skill.special?.includes('build_tower')) {
+    return executeBuildTower(state, casterId);
+  }
+
   if (skill.special?.includes('kuang_self_heal') && targetId === casterId) {
     return executeKuangSelfCast(state, casterId, skillId);
   }
@@ -106,29 +119,37 @@ export function executeSkill(
   }
 
   // Find target
-  const target = targetId
-    ? findHeroByPlayerId(state, targetId)
-    : findOpponentHero(state, casterId);
-
-  if (!target || !target.alive) return [];
+  const targetHero = targetId ? findHeroByPlayerId(state, targetId) : findOpponentHero(state, casterId);
+  const targetMinion = targetId ? findMinionById(state, targetId) : undefined;
+  if (!targetHero?.alive && !targetMinion?.alive) return [];
 
   // Check distance between caster and target
-  const dist = getDistance(caster.position, target.position);
+  const targetPosition = targetHero?.alive ? targetHero.position : targetMinion!.position;
+  const dist = getDistance(caster.position, targetPosition);
   if (dist < skill.minDistance || dist > skill.maxDistance) return [];
 
   // Check if target is invisible
-  if (target.invisibleRounds > 0 && skill.damageType === 'physical') return [];
+  if (targetHero && targetHero.invisibleRounds > 0 && skill.damageType === 'physical') return [];
+  if (targetMinion) {
+    if (skill.category === 'magic' && targetMinion.immuneTo.includes('magic')) return [];
+    if (skill.category === 'magic' && !targetMinion.immuneTo.includes('magic')) {
+      // allowed
+    } else if (skill.category !== 'physical') {
+      return [];
+    }
+  }
 
   const effects: GameEffect[] = [];
+  const damage = skill.damage > 0 ? skill.damage + caster.damageBonus : 0;
 
-  if (skill.damage > 0) {
+  if (damage > 0) {
     effects.push({
       type: 'damage',
       sourceId: casterId,
-      targetId: getPlayerId(state, target),
-      value: skill.damage,
+      targetId: targetHero ? getPlayerId(state, targetHero) : targetMinion!.minionId,
+      value: damage,
       damageType: skill.damageType,
-      description: `${casterId} uses ${skill.name} for ${skill.damage} ${skill.damageType} damage`,
+      description: `${casterId} uses ${skill.name} for ${damage} ${skill.damageType} damage`,
     });
   }
 
@@ -154,13 +175,14 @@ export function executeSkill(
   }
 
   if (skill.appliesStatus && skill.statusDuration) {
+    if (!targetHero) return effects;
     effects.push({
       type: 'status_apply',
       sourceId: casterId,
-      targetId: getPlayerId(state, target),
+      targetId: getPlayerId(state, targetHero),
       statusEffect: skill.appliesStatus,
       value: skill.statusDuration,
-      description: `${getPlayerId(state, target)} is ${skill.appliesStatus} for ${skill.statusDuration} round(s)`,
+      description: `${getPlayerId(state, targetHero)} is ${skill.appliesStatus} for ${skill.statusDuration} round(s)`,
     });
   }
 
@@ -207,6 +229,91 @@ function executeKuangTeammateHeal(state: GameState, casterId: string, targetId: 
     value: 40,
     description: `${casterId} uses Kuang on teammate ${targetId}, healing 40 HP!`,
   }];
+}
+
+function executeStomp(state: GameState, casterId: string, skill: { name: string; statusDuration?: number }): GameEffect[] {
+  const caster = findHeroByPlayerId(state, casterId);
+  if (!caster) return [];
+  const casterTeamIndex = getTeamIndex(state, casterId);
+  const effects: GameEffect[] = [];
+
+  for (const team of state.teams) {
+    if (team.teamIndex === casterTeamIndex) continue;
+    for (const player of team.players) {
+      if (!player.hero.alive) continue;
+      if (getDistance(caster.position, player.hero.position) !== 0) continue;
+      effects.push({
+        type: 'status_apply',
+        sourceId: casterId,
+        targetId: player.id,
+        statusEffect: 'stunned',
+        value: skill.statusDuration ?? 1,
+        description: `${player.id} is stunned by ${skill.name}`,
+      });
+    }
+  }
+
+  return effects;
+}
+
+function executeHeartFire(
+  state: GameState,
+  casterId: string,
+  targetId: string,
+  skill: { minDistance: number; maxDistance: number; name: string },
+): GameEffect[] {
+  const caster = findHeroByPlayerId(state, casterId);
+  const target = findHeroByPlayerId(state, targetId);
+  if (!caster || !target || !target.alive) return [];
+  if (getTeamIndex(state, casterId) !== getTeamIndex(state, targetId)) return [];
+
+  const dist = getDistance(caster.position, target.position);
+  if (dist < skill.minDistance || dist > skill.maxDistance) return [];
+
+  return [{
+    type: 'status_apply',
+    sourceId: casterId,
+    targetId,
+    description: `${casterId} empowers ${targetId} with ${skill.name}`,
+  }];
+}
+
+function executeEatLegs(
+  state: GameState,
+  casterId: string,
+  skill: { name: string; selfHeal: number },
+): GameEffect[] {
+  const caster = findHeroByPlayerId(state, casterId);
+  if (!caster) return [];
+  return [{
+    type: 'heal',
+    sourceId: casterId,
+    targetId: casterId,
+    value: skill.selfHeal,
+    description: `${casterId} uses ${skill.name} and heals ${skill.selfHeal} HP`,
+  }];
+}
+
+function executeBuildTower(state: GameState, casterId: string): GameEffect[] {
+  const player = findPlayerByPlayerId(state, casterId);
+  if (!player) return [];
+  const heroDef = getHero(player.hero.heroId);
+  if (!heroDef?.minion || player.minions.some(minion => minion.alive)) return [];
+  return [{
+    type: 'summon',
+    sourceId: casterId,
+    targetId: casterId,
+    description: `${casterId} builds ${heroDef.minion.name}!`,
+  }];
+}
+
+function findPlayerByPlayerId(state: GameState, playerId: string) {
+  for (const team of state.teams) {
+    for (const player of team.players) {
+      if (player.id === playerId) return player;
+    }
+  }
+  return undefined;
 }
 
 // ─── Helper functions ───

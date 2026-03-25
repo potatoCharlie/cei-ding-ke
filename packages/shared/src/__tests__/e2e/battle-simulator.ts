@@ -396,8 +396,9 @@ export function checkInvariants(state: GameState): string[] {
       }
 
       // Minion count
-      if (player.minions.length > 1) {
-        violations.push(`${player.id} has ${player.minions.length} minions (max 1)`);
+      const aliveMinionCount = player.minions.filter(m => m.alive).length;
+      if (aliveMinionCount > 1) {
+        violations.push(`${player.id} has ${aliveMinionCount} minions (max 1)`);
       }
     }
   }
@@ -486,6 +487,7 @@ export function simulateRandomMatch(
           heroEffects: [],
           minionEffects: [],
           startTurnEffects,
+          turnStartPositions: { ...state.positionsAtTurnStart },
           stateAfter: snapshotState(state),
         });
         break;
@@ -543,6 +545,7 @@ export function simulateRandomMatch(
       heroEffects,
       minionEffects,
       startTurnEffects,
+      turnStartPositions: { ...state.positionsAtTurnStart },
       stateAfter: snapshotState(state),
     });
 
@@ -590,6 +593,7 @@ export function simulateRandomMatch2v2(
           heroEffects: [],
           minionEffects: [],
           startTurnEffects,
+          turnStartPositions: { ...state.positionsAtTurnStart },
           stateAfter: snapshotState(state),
         });
         break;
@@ -614,6 +618,7 @@ export function simulateRandomMatch2v2(
         heroEffects: [],
         minionEffects: [],
         startTurnEffects,
+        turnStartPositions: { ...state.positionsAtTurnStart },
         stateAfter: snapshotState(state),
       });
       continue;
@@ -667,6 +672,7 @@ export function simulateRandomMatch2v2(
       heroEffects: allHeroEffects,
       minionEffects,
       startTurnEffects,
+      turnStartPositions: { ...state.positionsAtTurnStart },
       stateAfter: snapshotState(state),
     });
 

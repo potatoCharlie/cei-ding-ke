@@ -12,9 +12,7 @@ describe('Suspected bugs — Hellfire magic immunity', () => {
     expect(gaoDef?.minion?.immuneTo).toContain('magic');
   });
 
-  it('skills cannot target minions (only heroes)', () => {
-    // Currently, all skills target heroes via findHeroByPlayerId/findOpponentHero.
-    // Separate heroes so Nan's stink aura doesn't interfere.
+  it('magic skills cannot damage magic-immune minions', () => {
     const state = makeGame('nan', 'gao');
     setPositions(state, 3, 5);
 
@@ -24,43 +22,17 @@ describe('Suspected bugs — Hellfire magic immunity', () => {
     const minionId = getPlayer(state, 'p2').minions[0].minionId;
     executeAction(state, { type: 'stay', playerId: 'p2', minionId });
 
-    // Move heroes together for magic burn (dist 0)
     setPositions(state, 5, 5);
-    // Nan uses Magic Burn — should hit p2's hero, not the minion
     winRPSForPlayer(state, 'p1');
-    const p2HpBefore = getHero(state, 'p2').hp;
-    executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'magic_burn', targetId: 'p2' });
+    executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'magic_burn', targetId: minionId });
 
-    expect(getHero(state, 'p2').hp).toBe(p2HpBefore - 15); // hero takes 15 damage
-    expect(getPlayer(state, 'p2').minions[0].hp).toBe(100); // minion untouched
+    expect(getHero(state, 'p2').hp).toBe(100);
+    expect(getPlayer(state, 'p2').minions[0].hp).toBe(100);
   });
 });
 
 describe('Suspected bugs — Minion stun-break behavior', () => {
-  it('minion punch breaks stun on target hero (via applyMinionEffects)', () => {
-    const state = makeGame('gao', 'nan');
-    setPositions(state, 5, 5);
-
-    // Summon Hellfire
-    winRPSForPlayer(state, 'p1');
-    executeAction(state, { type: 'summon', playerId: 'p1' });
-    const minionId = getPlayer(state, 'p1').minions[0].minionId;
-    executeAction(state, { type: 'stay', playerId: 'p1', minionId });
-
-    // Stun p2
-    getHero(state, 'p2').statusEffects.push({ type: 'stunned', remainingRounds: 3 });
-
-    // Minion punches stunned hero → applyMinionEffects calls removeStunOnDamage
-    winRPSForPlayer(state, 'p1');
-    executeAction(state, { type: 'stay', playerId: 'p1' });
-
-    // Now minion action
-    state.awaitingMinionAction = true;
-    state.currentActionIndex = 0;
-    state.phase = 'action_phase';
-    state.actionOrder = ['p1'];
-
-    // Actually, let's redo this more cleanly
+  it('minion punch does not break stun on target hero', () => {
     const state2 = makeGame('gao', 'nan');
     setPositions(state2, 5, 5);
 
@@ -83,8 +55,7 @@ describe('Suspected bugs — Minion stun-break behavior', () => {
     const mid2 = getPlayer(state2, 'p1').minions[0].minionId;
     executeAction(state2, { type: 'punch', playerId: 'p1', targetId: 'p2', minionId: mid2 });
 
-    // Stun should be broken by minion damage (removeStunOnDamage is called in applyMinionEffects)
-    expect(getHero(state2, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+    expect(getHero(state2, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
     expect(getHero(state2, 'p2').hp).toBe(80); // 100 - 20 minion punch damage
   });
 
@@ -209,7 +180,7 @@ describe('Suspected bugs — Stun interactions', () => {
     expect(result.draw).toBe(false);
   });
 
-  it('active damage (hero punch) breaks stun', () => {
+  it('active damage (hero punch) does not break stun', () => {
     const state = makeGame();
     setPositions(state, 5, 5);
     getHero(state, 'p2').statusEffects.push({ type: 'stunned', remainingRounds: 3 });
@@ -217,13 +188,10 @@ describe('Suspected bugs — Stun interactions', () => {
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'punch', playerId: 'p1', targetId: 'p2' });
 
-    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
   });
 
-  it('active damage (skill) breaks stun, same-action stun is suppressed', () => {
-    // Magic Burn deals damage (breaking existing stun) then tries to apply stun.
-    // Since stun was just broken by this action's damage, re-stun is suppressed.
-    // This prevents infinite stun-lock from skills like Small Dart.
+  it('active damage (skill) preserves or refreshes stun duration', () => {
     const state = makeGame('nan', 'shan');
     setPositions(state, 5, 5);
     getHero(state, 'p2').statusEffects.push({ type: 'stunned', remainingRounds: 3 });
@@ -231,9 +199,7 @@ describe('Suspected bugs — Stun interactions', () => {
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'magic_burn', targetId: 'p2' });
 
-    // Stun was broken by damage and NOT re-applied → target is free
-    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
-    // Damage was still dealt
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
     expect(getHero(state, 'p2').hp).toBe(85);
   });
 
@@ -283,9 +249,7 @@ describe('Suspected bugs — Small Dart infinite stun-lock', () => {
     expect(getHero(state, 'p2').statusEffects.find(e => e.type === 'stunned')?.remainingRounds).toBe(1);
   });
 
-  it('Small Dart on stunned target breaks stun and does NOT re-stun', () => {
-    // This is the key fix: damage breaks stun, and the same action's stun
-    // effect is suppressed. The target wakes up instead of being infinitely locked.
+  it('Small Dart on stunned target refreshes stun instead of clearing it', () => {
     const state = makeGame('jin', 'shan');
     setPositions(state, 5, 5);
 
@@ -295,9 +259,8 @@ describe('Suspected bugs — Small Dart infinite stun-lock', () => {
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'small_dart', targetId: 'p2' });
 
-    // Damage dealt, but stun was broken and NOT re-applied
     expect(getHero(state, 'p2').hp).toBe(95);
-    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
   });
 
   it('1-round stun expires after startTurn tick', () => {
@@ -325,7 +288,7 @@ describe('Suspected bugs — Small Dart infinite stun-lock', () => {
     expect(getHero(state, 'p2').statusEffects.find(e => e.type === 'stunned')?.remainingRounds).toBe(1);
   });
 
-  it('repeated Small Darts do not permanently stun-lock (full turn simulation)', () => {
+  it('repeated Small Darts can continue to keep the target stunned across turns', () => {
     const state = makeGame('jin', 'shan');
     setPositions(state, 5, 5);
 
@@ -334,18 +297,10 @@ describe('Suspected bugs — Small Dart infinite stun-lock', () => {
     executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'small_dart', targetId: 'p2' });
     expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
 
-    // Turn 2: Server checks stun (before tick) → p2 stunned → Jin auto-wins RPS
-    // Server then ticks → stun removed. But Jin already won RPS, so Jin acts.
-    // Jin Small Darts stunned target → damage breaks stun, re-stun suppressed
+    startTurn(state);
     winRPSForPlayer(state, 'p1');
     executeAction(state, { type: 'skill', playerId: 'p1', skillId: 'small_dart', targetId: 'p2' });
-    // Target is now FREE (stun broken, not re-applied)
-    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(false);
-
-    // Turn 3: Both players play RPS normally
-    submitRPS(state, 'p1', 'rock');
-    const allSubmitted = submitRPS(state, 'p2', 'scissors');
-    expect(allSubmitted).toBe(true);
+    expect(getHero(state, 'p2').statusEffects.some(e => e.type === 'stunned')).toBe(true);
   });
 });
 

@@ -141,12 +141,14 @@ describe('getAvailableActions', () => {
       expect(kuangActions.some(a => a.targetId === 'p1')).toBe(true);
     });
 
-    it('Jin Kuang not available at distance > 1', () => {
+    it('Jin Kuang enemy target is not available at distance > 1, but self-cast remains available', () => {
       const state = makeGame('jin', 'nan');
       setPositions(state, 0, 3);
 
       const actions = getAvailableActions(state, 'p1');
-      expect(actions.some(a => a.type === 'skill' && a.skillId === 'kuang')).toBe(false);
+      const kuangActions = actions.filter(a => a.type === 'skill' && a.skillId === 'kuang');
+      expect(kuangActions.some(a => a.targetId === 'p2')).toBe(false);
+      expect(kuangActions.some(a => a.targetId === 'p1')).toBe(true);
     });
   });
 
