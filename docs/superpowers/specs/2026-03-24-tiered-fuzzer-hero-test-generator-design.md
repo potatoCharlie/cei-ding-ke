@@ -7,7 +7,7 @@ Two improvements to the automated test strategy:
 1. **Tiered auto-scaling fuzzer** — the invariant fuzzer auto-discovers all heroes and covers all combinations. A `FUZZER_TIER` env var switches between a fast (~30s) developer tier and a deep (10–20 min) pre-ship tier.
 2. **Hero test generator skill** — a Claude Code skill (`/generate-hero-tests <heroId>`) that reads a hero definition, generates a `.txt` scenario file covering all skills and the passive, runs the tests, self-corrects up to 3 times, and reports failures to the developer.
 
-Scope: `packages/shared/src/__tests__/e2e/invariant-fuzzer.test.ts` (rewrite), `package.json` at repo root (new script), `.claude/skills/generate-hero-tests.md` (new skill file). Engine and hero definitions are untouched.
+Scope: `packages/shared/src/__tests__/e2e/invariant-fuzzer.test.ts` (rewrite — the existing Termination Tests describe block must be preserved; update any hardcoded `HEROES` references inside it to use `getHeroIds()`), `package.json` at repo root (new `test:deep` script only), `.claude/skills/generate-hero-tests.md` (new skill file — create the `.claude/skills/` directory at repo root if it does not exist). Engine and hero definitions are untouched.
 
 ---
 
@@ -15,9 +15,9 @@ Scope: `packages/shared/src/__tests__/e2e/invariant-fuzzer.test.ts` (rewrite), `
 
 ### Combination generation
 
-At test startup the fuzzer calls `getAllHeroes()` and computes:
+At test startup the fuzzer calls `getHeroIds()` and computes:
 
-- **1v1 pairs:** all C(N,2) unique unordered pairs of heroes.
+- **1v1 pairs:** all C(N,2) unique unordered pairs of heroes (no same-hero matchups — the game does not support two identical heroes; the current fuzzer's full cartesian product includes `nan vs nan` etc., which are invalid and are intentionally dropped in this rewrite).
 - **2v2 team splits:** all C(N,4) groups of four heroes, each split into the 3 unique 2-vs-2 partitions. For heroes `[a,b,c,d]` the splits are `{a,b} vs {c,d}`, `{a,c} vs {b,d}`, `{a,d} vs {b,c}`.
 
 No hardcoded hero names remain. Adding a hero file automatically expands coverage.
@@ -31,25 +31,24 @@ Controlled by the `FUZZER_TIER` environment variable (default: `fast`).
 | `fast` | 5 | up to 50 | 3 | ~30s |
 | `deep` | 200 | up to 500 | 100 | ~10–20 min |
 
-2v2 sampling uses a fixed seed (constant integer) so the same combos are always selected — failures are reproducible. When the total number of 2v2 combos is less than the cap, all combos are run.
+2v2 combos are made deterministic as follows: (1) sort each team's hero list alphabetically, (2) represent each combo as a sorted 4-tuple `[a, b, c, d]` where `a < b < c < d` (all 4 heroes in alphabetical order, regardless of team split), (3) sort the full list of combo strings lexicographically, then take the first `cap` entries. No PRNG needed — always reproducible across runs and refactors. When the total number of 2v2 combos is less than the cap, all combos are run.
 
 ### npm scripts
 
-Added to root `package.json`:
+Root `package.json` — `"test"` already exists and is unchanged. Only `"test:deep"` is a new addition:
 
 ```json
-"test":       "cd packages/shared && npx vitest run",
-"test:deep":  "FUZZER_TIER=deep cd packages/shared && npx vitest run"
+"test:deep":  "FUZZER_TIER=deep npm run test --workspace=@cei-ding-ke/shared"
 ```
 
-`npm test` remains the fast developer command. `npm run test:deep` is run manually before shipping a feature.
+`npm test` remains the fast developer command. `npm run test:deep` is run manually before shipping a feature. (The inline `FUZZER_TIER=value` syntax works on macOS/Linux; Windows users would need `cross-env` — not required for this project.)
 
-### Additional invariants in `checkInvariants()`
+### Additional invariants
 
-Four new checks added alongside existing ones:
+Four new checks:
 
-1. **`actionOrder` contains only alive, non-stunned players.** A stunned player must not appear in `actionOrder` for that turn (they cannot take actions). Note: their team may still win via passive effects such as Nan's stink aura.
-2. **`currentActionIndex` never exceeds `actionOrder.length`.**
+1. **`actionOrder` contains only alive, non-stunned players — checked immediately after each `winRPS()` call (before the first action of that turn executes).** The fuzzer calls `winRPS()` directly (bypassing `rps_resolve`), so there is no phase-transition hook. The check runs once per turn setup, right after `state.actionOrder` is set. It is NOT inside the per-action `checkInvariants()` call — a player can become stunned mid-turn during sequential execution, which is valid. The fuzzer must also ensure it only passes alive, non-stunned players as winners to `winRPS()`. A failure of this check is a **fuzzer-internal bug** (wrong winner list constructed), not a game engine violation — it should throw immediately with a clear message rather than being recorded as a soft invariant violation. Note: a stunned player's team may still win via passive effects such as Nan's stink aura.
+2. **`currentActionIndex <= actionOrder.length`** — assert this holds at every `checkInvariants()` call.
 3. **Dead team → winner set.** If every player on a team has `hero.alive === false`, `state.winner` must be non-null and `state.phase` must be `'game_over'`.
 4. **No duplicate IDs in `actionOrder`.** Each player ID appears at most once per turn's action order.
 
@@ -99,10 +98,11 @@ Each scenario uses a fixed opponent from the existing hero pool (default: `nan` 
 
 **Step 4 — Run and self-correct (up to 3 iterations)**
 
-Run only the new scenario file:
+Run only the scripted-battles test, filtered to the new hero's scenarios:
 ```bash
-cd packages/shared && npx vitest run --reporter=verbose 2>&1
+cd packages/shared && npx vitest run src/__tests__/e2e/scripted-battles.test.ts -t "<heroId>" --reporter=verbose
 ```
+Replace `<heroId>` with the actual hero ID (e.g., `jin`). Vitest matches test names, which include the scenario name — since generated scenarios are named after the hero, this scopes output to only the new file's tests.
 
 If assertions fail (e.g., generated file says `hp=85` but engine produces `hp=80`):
 - Read the failure output, identify which assertion line is wrong
