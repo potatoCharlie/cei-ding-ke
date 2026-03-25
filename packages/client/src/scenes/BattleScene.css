@@ -403,3 +403,72 @@
 .anim-heal { animation: healPulse 0.7s ease-out; }
 .anim-stun { animation: stunShake 0.5s ease-out; }
 .anim-death { animation: deathFade 0.8s ease-out forwards; }
+
+/* ─── Action Order Bar ─── */
+.action-order-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  justify-content: center;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid #334155;
+}
+
+.action-order-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  background: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 8px;
+  opacity: 0.7;
+  transition: all 0.2s;
+  min-width: 52px;
+}
+
+.action-order-card.acting {
+  opacity: 1;
+  transform: scale(1.25);
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.action-order-card.done {
+  opacity: 0.35;
+}
+
+.action-order-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.action-order-card.acting .action-order-emoji {
+  font-size: 22px;
+}
+
+.action-order-card.done .action-order-name {
+  text-decoration: line-through;
+}
+
+.action-order-name {
+  font-size: 10px;
+  color: #94a3b8;
+  font-family: 'Chakra Petch', sans-serif;
+  white-space: nowrap;
+}
+
+.action-order-badge {
+  font-size: 9px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Silkscreen', monospace;
+}
+
+.action-order-badge.done-badge {
+  color: #64748b;
+  background: transparent;
+}

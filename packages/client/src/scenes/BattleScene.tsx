@@ -31,6 +31,42 @@ type CellEntity = {
   isMe: boolean;
 }
 
+function ActionOrderBar({ gameState, myPlayerId }: { gameState: GameState; myPlayerId: string }) {
+  if (gameState.phase !== 'action_phase' || gameState.actionOrder.length === 0) return null;
+
+  const allPlayers = gameState.teams.flatMap(t => t.players);
+
+  return (
+    <div className="action-order-bar">
+      {gameState.actionOrder.map((playerId, index) => {
+        const player = allPlayers.find(p => p.id === playerId);
+        if (!player) return null;
+
+        const teamIndex = gameState.teams.findIndex(t => t.players.some(p => p.id === playerId));
+        const visual = getHeroVisual(player.hero.heroId);
+        const isActing = index === gameState.currentActionIndex;
+        const hasActed = index < gameState.currentActionIndex;
+        const isMe = playerId === myPlayerId;
+
+        return (
+          <div
+            key={playerId}
+            className={`action-order-card ${isActing ? 'acting' : ''} ${hasActed ? 'done' : ''}`}
+            style={isActing ? { borderColor: teamIndex === 0 ? 'var(--team-blue)' : 'var(--team-red-light)', boxShadow: `0 0 12px ${teamIndex === 0 ? 'var(--team-blue)' : 'var(--team-red-light)'}40` } : {}}
+          >
+            <div className="action-order-emoji">{visual.emoji}</div>
+            <div className="action-order-name" style={{ color: isActing ? (teamIndex === 0 ? 'var(--team-blue)' : 'var(--team-red-light)') : undefined }}>
+              {player.name}{isMe ? ' ★' : ''}
+            </div>
+            {isActing && <div className="action-order-badge">acting</div>}
+            {hasActed && <div className="action-order-badge done-badge">✓</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function BattleScene({ gameState, myPlayerId, activeAnimations, floatingNumbers }: Props) {
   const myTeamIndex = gameState.teams.findIndex(t =>
     t.players.some(p => p.id === myPlayerId),
@@ -96,6 +132,8 @@ export function BattleScene({ gameState, myPlayerId, activeAnimations, floatingN
 
   return (
     <div className="battle-arena">
+      <ActionOrderBar gameState={gameState} myPlayerId={myPlayerId} />
+
       {/* Turn info */}
       <div className="turn-overlay">
         <span className="turn-badge">Turn {gameState.turn}</span>
