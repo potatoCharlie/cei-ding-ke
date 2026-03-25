@@ -144,7 +144,7 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 | `2v2-combat.test.ts` | Target-based punch counter, Kuang teammate heal |
 | `2v2-passives.test.ts` | Nan stink aura on multiple enemies |
 | `e2e/scripted-battles.test.ts` | 16 full-match scenarios (1v1 + 2v2) loaded from `.txt` DSL files (see below) |
-| `e2e/invariant-fuzzer.test.ts` | 800+ random 1v1 matches + 60 random 2v2 matches checking invariants |
+| `e2e/invariant-fuzzer.test.ts` | Tiered fuzzer: fast (`npm test`) = 30 1v1 + 9 2v2 matches; deep (`npm run test:deep`) = 1200+ 1v1 + 300 2v2 matches. Auto-discovers all heroes via `getHeroIds()`. |
 
 ### E2E Battle Simulator
 
