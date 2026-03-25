@@ -8,6 +8,9 @@ export interface ClientEvents {
   'rps:submit': (data: { choice: RPSChoice }) => void;
   'action:submit': (data: PlayerAction) => void;
   'order:yield': (data: { toPlayerId: string }) => void;
+  'team:join': (data: { teamIndex: 0 | 1 }) => void;
+  'team:leave': () => void;
+  'lobby:ready': () => void;
 }
 
 // ─── Server -> Client ───
@@ -71,4 +74,6 @@ export interface ServerEvents {
   'error': (data: { message: string }) => void;
   'player:joined': (data: { playerId: string; name: string }) => void;
   'player:left': (data: { playerId: string }) => void;
+  'game:hero_select': () => void;
+  'available:actions': (actions: PlayerAction[]) => void;
 }
