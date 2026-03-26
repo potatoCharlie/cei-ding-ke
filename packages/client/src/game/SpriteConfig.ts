@@ -6,6 +6,7 @@ export interface HeroVisualConfig {
   emoji: string;
   glowColor: string;
   label: string;
+  archetype: string;  // e.g. "Mage · DoT"
 }
 
 export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
@@ -15,6 +16,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🦨',
     glowColor: '#c084fc',
     label: 'Nan',
+    archetype: 'Mage · DoT',
   },
   shan: {
     color: '#ef4444',
@@ -22,6 +24,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '⚔️',
     glowColor: '#fca5a5',
     label: 'Shan',
+    archetype: 'Fighter · Burst',
   },
   gao: {
     color: '#f59e0b',
@@ -29,6 +32,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🔥',
     glowColor: '#fcd34d',
     label: 'Gao',
+    archetype: 'Summoner · Control',
   },
   jin: {
     color: '#3b82f6',
@@ -36,6 +40,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🗡️',
     glowColor: '#93c5fd',
     label: 'Jin',
+    archetype: 'Assassin · Stealth',
   },
   mu: {
     color: '#14b8a6',
@@ -43,6 +48,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🎯',
     glowColor: '#99f6e4',
     label: 'Mu',
+    archetype: 'Ranged · Kuang Burst',
   },
   hans: {
     color: '#b45309',
@@ -50,6 +56,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🐂',
     glowColor: '#fcd34d',
     label: 'Hans',
+    archetype: 'Bruiser · Stun',
   },
   octopus: {
     color: '#0f766e',
@@ -57,6 +64,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🐙',
     glowColor: '#67e8f9',
     label: 'Octopus',
+    archetype: 'Builder · Tower',
   },
   fan: {
     color: '#db2777',
@@ -64,6 +72,7 @@ export const HERO_VISUALS: Record<string, HeroVisualConfig> = {
     emoji: '🔥',
     glowColor: '#f9a8d4',
     label: 'Fan',
+    archetype: 'Support · Buff',
   },
 };
 
@@ -74,6 +83,7 @@ export function getHeroVisual(heroId: string): HeroVisualConfig {
     emoji: '🦸',
     glowColor: '#9ca3af',
     label: heroId,
+    archetype: 'Unknown',
   };
 }
 
@@ -83,4 +93,5 @@ export const STATUS_ICONS: Record<string, { icon: string; color: string }> = {
   trapped: { icon: '🧊', color: '#3b82f6' },
   slowed: { icon: '🐌', color: '#8b5cf6' },
   invisible: { icon: '👻', color: '#6366f1' },
+  heart_fire_buff: { icon: '🔥', color: '#f472b6' },
 };
