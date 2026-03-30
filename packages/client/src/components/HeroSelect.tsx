@@ -1,185 +1,155 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { getAllHeroes } from '@cei-ding-ke/shared';
 import { getHeroVisual } from '../game/SpriteConfig.js';
 
 interface Props {
   onSelect: (heroId: string) => void;
+  selectedHeroId?: string;
 }
 
-export function HeroSelect({ onSelect }: Props) {
+export function HeroSelect({ onSelect, selectedHeroId }: Props) {
   const heroes = getAllHeroes();
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   return (
     <div className="heroselect-grid">
       {heroes.map(hero => {
         const visual = getHeroVisual(hero.id);
-        const isHovered = hoveredId === hero.id;
+        const isSelected = selectedHeroId === hero.id;
+
         return (
           <button
             key={hero.id}
             onClick={() => onSelect(hero.id)}
-            onMouseEnter={() => setHoveredId(hero.id)}
-            onMouseLeave={() => setHoveredId(null)}
-            className={`heroselect-card ${isHovered ? 'hovered' : ''}`}
+            className={`heroselect-card ${isSelected ? 'selected' : ''}`}
             style={{ '--hero-color': visual.color } as React.CSSProperties}
           >
-            <div className="heroselect-header">
-              <div className="heroselect-sprite" style={{ background: visual.bgGradient }}>
-                {visual.emoji}
-              </div>
-              <div className="heroselect-title">
-                <h3 className="heroselect-name">{hero.name}</h3>
-                <p className="heroselect-desc">{hero.description}</p>
+            {/* Avatar strip */}
+            <div
+              className="heroselect-avatar"
+              style={{ background: visual.bgGradient }}
+            >
+              <span className="heroselect-emoji">{visual.emoji}</span>
+            </div>
+
+            {/* Info panel */}
+            <div className="heroselect-info">
+              <div className="heroselect-name">{hero.name.toUpperCase()}</div>
+              <div className="heroselect-archetype">{visual.archetype}</div>
+              <div className="heroselect-skills">
+                {hero.passive && (
+                  <div className="heroselect-skill-line">🟣 {hero.passive.name}</div>
+                )}
+                {hero.physicalSkills.map(s => (
+                  <div key={s.id} className="heroselect-skill-line">🔴 {s.name}</div>
+                ))}
+                {hero.magicSkills.map(s => (
+                  <div key={s.id} className="heroselect-skill-line">🔵 {s.name}</div>
+                ))}
+                {hero.minion && (
+                  <div className="heroselect-skill-line">🟢 {hero.minion.name}</div>
+                )}
               </div>
             </div>
 
-            <div className="heroselect-skills">
-              {hero.passive && (
-                <div className="heroselect-skill-row">
-                  <span className="skill-tag purple">Passive</span>
-                  <span className="skill-text"><strong>{hero.passive.name}</strong>: {hero.passive.description}</span>
-                </div>
-              )}
-
-              {hero.physicalSkills.map(skill => (
-                <div key={skill.id} className="heroselect-skill-row">
-                  <span className="skill-tag red">Physical</span>
-                  <span className="skill-text"><strong>{skill.name}</strong>: {skill.description}</span>
-                </div>
-              ))}
-
-              {hero.magicSkills.map(skill => (
-                <div key={skill.id} className="heroselect-skill-row">
-                  <span className="skill-tag blue">Magic</span>
-                  <span className="skill-text"><strong>{skill.name}</strong>: {skill.description}</span>
-                </div>
-              ))}
-
-              {hero.minion && (
-                <div className="heroselect-skill-row">
-                  <span className="skill-tag green">Minion</span>
-                  <span className="skill-text"><strong>{hero.minion.name}</strong>: {hero.minion.description}</span>
-                </div>
-              )}
-            </div>
+            {/* Bottom accent bar */}
+            <div className="heroselect-accent" />
           </button>
         );
       })}
 
       <style>{`
         .heroselect-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
         }
 
         .heroselect-card {
-          background: linear-gradient(180deg, var(--bg-elevated), var(--bg-surface));
-          border: 2px solid var(--border-base);
-          border-radius: 14px;
-          padding: 18px;
-          color: var(--text-primary);
+          display: flex;
+          position: relative;
+          border-radius: 10px;
+          overflow: hidden;
+          border: 1px solid #374151;
+          background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
           cursor: pointer;
           text-align: left;
           font-family: var(--font-body);
           transition: all 0.2s ease;
-          animation: fadeIn 0.3s ease-out both;
-          position: relative;
-          overflow: hidden;
+          padding: 0;
         }
 
-        .heroselect-card::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(180deg, #ffffff04, transparent);
-          pointer-events: none;
-        }
-
-        .heroselect-card.hovered {
+        .heroselect-card:hover {
           border-color: var(--hero-color);
           transform: translateY(-2px);
-          box-shadow: 0 8px 32px #00000060, 0 0 0 1px var(--hero-color);
+          box-shadow: 0 6px 20px #00000050;
         }
 
-        .heroselect-header {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          margin-bottom: 14px;
+        .heroselect-card.selected {
+          border: 2px solid var(--hero-color);
+          box-shadow: 0 0 12px color-mix(in srgb, var(--hero-color) 30%, transparent);
         }
 
-        .heroselect-sprite {
+        .heroselect-avatar {
           width: 52px;
-          height: 52px;
-          border-radius: 12px;
+          flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 26px;
-          flex-shrink: 0;
-          border: 2px solid #ffffff15;
-          box-shadow: 0 2px 12px #00000040;
         }
 
-        .heroselect-title {
+        .heroselect-emoji {
+          font-size: 28px;
+          filter: drop-shadow(0 2px 4px #00000080);
+        }
+
+        .heroselect-info {
           flex: 1;
+          padding: 6px 8px;
+          overflow: hidden;
           min-width: 0;
         }
 
         .heroselect-name {
           font-family: var(--font-display);
-          font-size: 14px;
+          font-size: 10px;
           color: var(--hero-color);
-          margin-bottom: 3px;
           letter-spacing: 1px;
+          margin-bottom: 1px;
         }
 
-        .heroselect-desc {
-          font-size: 13px;
-          color: var(--text-secondary);
-          line-height: 1.4;
+        .heroselect-archetype {
+          font-size: 7px;
+          color: #94a3b8;
+          margin-bottom: 4px;
         }
 
         .heroselect-skills {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 1px;
+          overflow: hidden;
         }
 
-        .heroselect-skill-row {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          font-size: 12px;
-          line-height: 1.4;
-        }
-
-        .skill-tag {
-          display: inline-block;
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          flex-shrink: 0;
-          margin-top: 1px;
-        }
-
-        .skill-tag.red { background: #ef444430; color: #fca5a5; border: 1px solid #ef444425; }
-        .skill-tag.blue { background: #3b82f630; color: #93c5fd; border: 1px solid #3b82f625; }
-        .skill-tag.green { background: #10b98130; color: #6ee7b7; border: 1px solid #10b98125; }
-        .skill-tag.purple { background: #a855f730; color: #d8b4fe; border: 1px solid #a855f725; }
-
-        .skill-text {
+        .heroselect-skill-line {
+          font-size: 7px;
           color: var(--text-secondary);
+          line-height: 1.2;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
-        .skill-text strong {
-          color: var(--text-primary);
-          font-weight: 600;
+        .heroselect-accent {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: #374151;
+        }
+
+        .heroselect-card.selected .heroselect-accent {
+          background: var(--hero-color);
         }
       `}</style>
     </div>
