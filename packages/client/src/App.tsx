@@ -314,7 +314,7 @@ export default function App() {
             <button
               className="game-btn game-btn-primary"
               onClick={handleQuickMatch}
-              disabled={!selectedHero}
+              disabled={!selectedHero || !playerName.trim()}
             >
               Find Match ({mode})
             </button>
