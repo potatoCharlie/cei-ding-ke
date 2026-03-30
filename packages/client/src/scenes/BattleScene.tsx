@@ -88,7 +88,7 @@ function HeroCell({
         </div>
         {cellBadges.length > 0 && (
           <div className="hero-cell-status">
-            {cellBadges.map((b, i) => <span key={i} className="hero-cell-status-badge" title={b.label}>{b.text}</span>)}
+            {cellBadges.map((b) => <span key={b.label} className="hero-cell-status-badge" title={b.label}>{b.text}</span>)}
             {overflow > 0 && <span className="hero-cell-status-badge">+{overflow}</span>}
           </div>
         )}
@@ -116,7 +116,7 @@ function HeroCell({
       </div>
       {cellBadges.length > 0 && (
         <div className="hero-cell-status">
-          {cellBadges.map((b, i) => <span key={i} className="hero-cell-status-badge" title={b.label}>{b.text}</span>)}
+          {cellBadges.map((b) => <span key={b.label} className="hero-cell-status-badge" title={b.label}>{b.text}</span>)}
           {overflow > 0 && <span className="hero-cell-status-badge">+{overflow}</span>}
         </div>
       )}
@@ -169,7 +169,7 @@ function PortraitBar({
 }) {
   const isActionPhase = gameState.phase === 'action_phase';
   const myTeamPlayers = gameState.teams[myTeamIndex]?.players ?? [];
-  const enemyTeamPlayers = gameState.teams.find((_: unknown, i: number) => i !== myTeamIndex)?.players ?? [];
+  const enemyTeamPlayers = gameState.teams.find((_, i) => i !== myTeamIndex)?.players ?? [];
 
   const getCardState = (playerId: string): 'acting' | 'acted' | 'default' => {
     if (!isActionPhase) return 'default';
@@ -205,8 +205,8 @@ function PortraitBar({
           {player.name}{isMe ? ' ★' : ''} · {player.hero.hp}hp
         </div>
         <div className="portrait-card-status">
-          {allBadges.map((b, i) => (
-            <span key={i} title={b.label}>{b.text}</span>
+          {allBadges.map((b) => (
+            <span key={b.label} title={b.label}>{b.text}</span>
           ))}
         </div>
       </div>
