@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { socket, connectSocket } from './network/socket.js';
 import type { GameState, RPSChoice, PlayerAction, GameEffect } from '@cei-ding-ke/shared';
-import { getAllHeroes, RPS_TIMER, ACTION_TIMER } from '@cei-ding-ke/shared';
+import { RPS_TIMER, ACTION_TIMER } from '@cei-ding-ke/shared';
 import { HeroSelect } from './components/HeroSelect.js';
 import { RPSPicker } from './components/RPSPicker.js';
 import { ActionPanel } from './components/ActionPanel.js';
@@ -307,22 +307,14 @@ export default function App() {
           <div className="menu-card">
             <div className="card-header">Quick Match</div>
             <p className="card-hint">Select a hero and find an opponent</p>
-            <div className="hero-mini-grid">
-              {getAllHeroes().map(hero => (
-                <button
-                  key={hero.id}
-                  className={`hero-mini-btn ${selectedHero === hero.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedHero(hero.id)}
-                >
-                  <strong>{hero.name}</strong>
-                  <span className="hero-mini-desc">{hero.description.slice(0, 40)}...</span>
-                </button>
-              ))}
-            </div>
+            <HeroSelect
+              onSelect={(heroId) => setSelectedHero(heroId)}
+              selectedHeroId={selectedHero}
+            />
             <button
-              className="game-btn game-btn-gold"
+              className="game-btn game-btn-primary"
               onClick={handleQuickMatch}
-              disabled={!selectedHero || !playerName}
+              disabled={!selectedHero}
             >
               Find Match ({mode})
             </button>
@@ -856,50 +848,6 @@ const menuStyles = `
 
   .join-row .game-input {
     flex: 1;
-  }
-
-  .hero-mini-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-
-  .hero-mini-btn {
-    padding: 14px;
-    border-radius: 10px;
-    border: 2px solid var(--border-dim);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    text-align: left;
-    font-family: var(--font-body);
-    transition: all 0.2s;
-  }
-
-  .hero-mini-btn:hover {
-    border-color: var(--border-bright);
-    background: var(--bg-elevated);
-  }
-
-  .hero-mini-btn.selected {
-    border-color: var(--gold);
-    background: linear-gradient(180deg, #f59e0b10, #f59e0b05);
-    box-shadow: 0 0 12px #f59e0b20;
-  }
-
-  .hero-mini-btn strong {
-    color: var(--gold-light);
-    font-size: 14px;
-  }
-
-  .hero-mini-desc {
-    font-size: 11px;
-    color: var(--text-dim);
-    line-height: 1.3;
   }
 
   .error-banner {
