@@ -48,7 +48,8 @@ Deploys automatically on push to `main` via Railway's GitHub integration.
 | Positions | `shared/src/game-engine/position.ts` | Distance calc, `isMoveLegal()`, max distance constraint |
 | RPS | `shared/src/game-engine/rps.ts` | Rock-paper-scissors resolution |
 | Status effects | `shared/src/game-engine/status-effects.ts` | Stun, trap, slow, invisibility tick/expiry |
-| Heroes | `shared/src/heroes/{nan,shan,gao,jin}.ts` | Hero definitions (skills, stats, passives) |
+| Heroes | `shared/src/heroes/{nan,shan,gao,jin,mu,hans,fan,octopus}.ts` | Hero definitions (skills, stats, passives) |
+| Hero registry | `shared/src/heroes/registry.ts` | `getHero()`, `getAllHeroes()`, `getHeroIds()` — source of truth for available heroes |
 | Types | `shared/src/types/game.ts` | All game state types |
 | Protocol | `shared/src/types/protocol.ts` | Socket.IO event types |
 | Server rooms | `server/src/game/GameRoom.ts` | Room lifecycle, phase management, timeouts |
@@ -65,7 +66,7 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 - Each turn: players do rock-paper-scissors, winner gets 1 action
 - Actions: move forward/backward, punch, cast skill, summon minion, stay
 - Infinite 1D map (unbounded positions), max distance between any 2 entities = 3
-- 4 heroes: Nan (mage/DoT), Shan (fighter), Gao (summoner), Jin (assassin)
+- 8 heroes: Nan (mage/DoT), Shan (fighter), Gao (summoner), Jin (assassin), Mu (ranged/Kuang burst), Hans (bruiser/stun), Fan (buff support), Octopus (builder/tower)
 
 ## Key Architectural Decisions
 
@@ -79,7 +80,8 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 - **Max distance constraint**: `isMoveLegal()` in `position.ts` checks all pairwise entity distances before allowing movement.
 - **2v2 multi-player RPS**: Elimination-style — if all 3 choices present → tie, if 2 choices → standard RPS winners/losers. Winners act in sequence via `actionOrder`. Uses `resolveRPSMulti` from `rps.ts`.
 - **2v2 game creation**: `createGameState(gameId, '2v2', players[])` with backward-compatible `(gameId, player1, player2)` overload. No duplicate heroes in 2v2. 3v3 throws until 6+ heroes.
-- **Kuang teammate heal**: 40 HP heal (same as self-cast), no self-damage. Only Kuang allows teammate targeting.
+- **Kuang teammate heal**: 40 HP heal (same as self-cast), no self-damage. Only Kuang allows teammate targeting. Both Nan and Mu have Kuang.
+- **positionsAtTurnStart**: `state.positionsAtTurnStart` is snapshotted at the end of each turn (in `endTurn()`). Used to track where heroes started a turn for position-dependent logic. E2E DSL supports `posStart=N` / `posEnd=N` assertions on player expectations.
 
 ## Code Conventions
 
@@ -97,9 +99,11 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 
 **Adding a new hero:**
 1. Create `packages/shared/src/heroes/<name>.ts` following existing hero file pattern
-2. Export from `packages/shared/src/index.ts`
-3. Add sprite config in `packages/client/src/game/SpriteConfig.ts`
-4. Rebuild shared: `npm run build:shared`
+2. Register in `packages/shared/src/heroes/registry.ts` (import + add to Map)
+3. Export from `packages/shared/src/index.ts`
+4. Implement any new `special` effects in `combat.ts` and `GameState.ts`
+5. Add sprite config in `packages/client/src/game/SpriteConfig.ts`
+6. Rebuild shared: `npm run build:shared`
 
 **Adding a new action type:**
 1. Add to `ActionType` union in `packages/shared/src/types/game.ts`
@@ -114,7 +118,7 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 
 ## What's Implemented (Phase 1, 2 & 3)
 
-- **All 4 heroes** with full skill sets (Nan, Shan, Gao, Jin)
+- **All 8 heroes** with full skill sets (Nan, Shan, Gao, Jin, Mu, Hans, Fan, Octopus)
 - **1v1 multiplayer** with RPS turn system, all actions, status effects, minions
 - **2v2 game engine** — multi-player RPS (elimination-style), sequential action execution, target-based punch counter, Kuang teammate heal, Nan multi-target stink aura, mid-round death handling
 - **Client**: Menu → Hero Select → Lobby → Battle → Result, retro pixel-art arena UI, team colors
@@ -123,7 +127,7 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 
 ## Testing
 
-280 tests in `packages/shared` covering all game logic (zero server/client needed):
+399 tests in `packages/shared` covering all game logic (zero server/client needed):
 
 | Test file | Coverage area |
 |-----------|---------------|
@@ -133,7 +137,8 @@ Source of truth: `game-plan.docx` (gitignored, the `.txt` export is missing hero
 | `combat.test.ts` | Punch, Wind Walk punch, all skills, invisible interactions |
 | `status-effects.test.ts` | Apply/tick/expire, Frozen DoT, stink aura |
 | `GameState.test.ts` | Full state machine: RPS → action → effects → death → game over |
-| `nan/shan/gao/jin.test.ts` | Per-hero skill behavior and edge cases |
+| `nan/shan/gao/jin.test.ts` | Per-hero skill behavior and edge cases (original 4 heroes) |
+| `mu/hans/fan/octopus.test.ts` | Per-hero skill behavior for new heroes |
 | `scenarios.test.ts` | Multi-turn combos (3-punch stun, stealth approach, summon+minion) |
 | `edge-cases.test.ts` | 1 HP death, heal cap, negative positions, multiple effects |
 | `suspected-bugs.test.ts` | Magic immunity, minion stun-break, punch counter resets, stun interactions |
@@ -162,7 +167,7 @@ The `e2e/` directory contains a battle simulation framework:
     p1 skill small_dart p2
     > p2: hp=95 stunned=true
   ```
-  DSL reference: `heroes:` (2 or 4 heroes), `pos:` (2 or 4 positions), `setup p1|p2|p3|p4: key=val`, `turn N: pX wins` or `turn N: p1 p2 win` (multi-winner), action lines (`punch`, `skill`, `move_forward`, `move_backward`, `summon`, `stay`), `minion` lines, `> pX: key=val` assertions, `> phase=X winner=X` assertions.
+  DSL reference: `heroes:` (2 or 4 heroes), `pos:` (2 or 4 positions), `setup p1|p2|p3|p4: key=val`, `turn N: pX wins` or `turn N: p1 p2 win` (multi-winner), action lines (`punch`, `skill`, `move_forward`, `move_backward`, `summon`, `stay`), `minion` lines, `> pX: key=val` assertions, `> phase=X winner=X` assertions. Player assertions support: `hp=N`, `position=N`, `posStart=N` (position at turn start), `posEnd=N` (position at turn end), `alive=bool`, `stunned=bool`, `trapped=bool`, `invisible=bool`.
 - **`invariant-fuzzer.test.ts`** — Runs random matches and checks invariants (HP bounds, death consistency, distance limits, phase/winner consistency, etc.).
 
 ## Known Design Gaps

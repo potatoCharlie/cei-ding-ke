@@ -1,6 +1,7 @@
 import {
   createGameState, executeAction, startTurn, getAvailableActions,
   type GameState, type PlayerAction, type GameEffect,
+  MAX_DISTANCE,
 } from '../../index.js';
 import { isStunned } from '../../game-engine/status-effects.js';
 
@@ -440,6 +441,31 @@ export function checkInvariants(state: GameState): string[] {
       break;
     }
     seen.add(id);
+  }
+
+  // Max distance between any two alive entities (heroes + minions) must be ≤ MAX_DISTANCE
+  const aliveEntities: Array<{ label: string; pos: number }> = [];
+  for (const team of state.teams) {
+    for (const player of team.players) {
+      if (player.hero.alive) {
+        aliveEntities.push({ label: player.id, pos: player.hero.position });
+      }
+      for (const minion of player.minions) {
+        if (minion.alive) {
+          aliveEntities.push({ label: `${player.id}_minion`, pos: minion.position });
+        }
+      }
+    }
+  }
+  for (let a = 0; a < aliveEntities.length; a++) {
+    for (let b = a + 1; b < aliveEntities.length; b++) {
+      const dist = Math.abs(aliveEntities[a].pos - aliveEntities[b].pos);
+      if (dist > MAX_DISTANCE) {
+        violations.push(
+          `Max distance violated: ${aliveEntities[a].label}@${aliveEntities[a].pos} vs ${aliveEntities[b].label}@${aliveEntities[b].pos} (dist=${dist}, max=${MAX_DISTANCE})`
+        );
+      }
+    }
   }
 
   return violations;

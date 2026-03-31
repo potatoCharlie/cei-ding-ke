@@ -254,7 +254,8 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
     if (state.winner === null) {
       state.currentActionIndex++;
       if (state.currentActionIndex >= state.actionOrder.length) {
-        endTurn(state);
+        const passiveEffects = endTurn(state);
+        effects.push(...passiveEffects);
       }
     }
     return effects;
@@ -362,7 +363,8 @@ export function executeAction(state: GameState, action: PlayerAction): GameEffec
     } else {
       state.currentActionIndex++;
       if (state.currentActionIndex >= state.actionOrder.length) {
-        endTurn(state);
+        const passiveEffects = endTurn(state);
+        effects.push(...passiveEffects);
       }
     }
   }
@@ -551,15 +553,18 @@ function executeSummon(state: GameState, playerId: string): GameEffect[] {
 
 /**
  * End the current turn.
+ * Returns passive effects (e.g. stink aura damage) that were applied this turn,
+ * so callers can include them in their effect logs.
  */
-export function endTurn(state: GameState): void {
+export function endTurn(state: GameState): GameEffect[] {
   const passiveEffects = applyPassiveEffects(state);
   applyEffects(state, passiveEffects);
 
-  checkDeaths(state);
+  const deathEffects = checkDeaths(state);
   checkWinCondition(state);
+  const allPassive = [...passiveEffects, ...deathEffects];
 
-  if (state.winner !== null) return;
+  if (state.winner !== null) return allPassive;
 
   // Snapshot positions for next turn's passive checks
   const posSnap: Record<string, number> = {};
@@ -576,6 +581,7 @@ export function endTurn(state: GameState): void {
   state.actionOrder = [];
   state.currentActionIndex = 0;
   state.awaitingMinionAction = false;
+  return allPassive;
 }
 
 /**

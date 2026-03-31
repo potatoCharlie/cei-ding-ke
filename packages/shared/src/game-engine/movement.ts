@@ -1,6 +1,6 @@
 import { NORMAL_MOVE_SPEED, SLOWED_MOVE_SPEED } from '../constants.js';
 import type { GameState, HeroState, GameEffect } from '../types/game.js';
-import { getTeamIndex, findHeroByPlayerId, findOpponentHero } from './position.js';
+import { getTeamIndex, getForwardDirection, findHeroByPlayerId, findOpponentHero } from './position.js';
 
 /**
  * Get the effective move speed for a hero based on status effects.
@@ -29,7 +29,7 @@ function getDirectionTowardEnemy(state: GameState, playerId: string, heroPos: nu
     const teamIndex = getTeamIndex(state, playerId);
     return teamIndex === 0 ? 1 : -1;
   }
-  if (oppHero.position === heroPos) return 1; // already at same position, arbitrary
+  if (oppHero.position === heroPos) return getForwardDirection(getTeamIndex(state, playerId));
   return oppHero.position > heroPos ? 1 : -1;
 }
 
